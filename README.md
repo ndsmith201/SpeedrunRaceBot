@@ -1,96 +1,122 @@
 # Speedrun Race Bot
 
-A starter Discord bot for running casual speedrun races. It currently keeps race data in memory, which makes it ideal for development and prototyping; add a database before relying on it in production.
+A Discord bot for organizing casual speedrun races. Race state is stored in memory, so restarting the bot clears active races and their current results.
 
 ## Setup
 
 1. Install Python 3.11 or newer.
-2. Install [Poetry](https://python-poetry.org/docs/) and install dependencies:
+2. Install [Poetry](https://python-poetry.org/docs/) and dependencies:
 
    ```powershell
    poetry install
    ```
 
-3. Copy `.env.example` to `.env`, then add your Discord bot token and set `RACE_GAME`.
-4. Invite the bot to a test server with the `bot` and `applications.commands` scopes.
-5. Run it:
+3. Copy `.env.example` to `.env`, then set `DISCORD_TOKEN` and `RACE_GAME`.
+4. Invite the bot with the `bot` and `applications.commands` scopes.
+5. Run the bot:
 
    ```powershell
    poetry run python -m speedrun_race_bot
    ```
 
-Set `DISCORD_GUILD_ID` in `.env` during development so slash commands are available immediately in that server.
+Set `DISCORD_GUILD_ID` during development for immediate slash-command updates in that server. Restart the bot after changing `config/race_options.yaml` so Discord can register the updated `/race create` fields.
 
-## Voice announcements
+## Race flow
 
-`/race create` requires a voice channel. The bot joins it and announces each racer
-with text-to-speech. The bot role needs **View Channel**, **Connect**, and **Speak**
-permissions in that voice channel. Install [FFmpeg](https://ffmpeg.org/download.html)
-and make sure `ffmpeg` is available on your system `PATH`; it is required to play
-the generated speech audio.
+1. Create a lobby with `/race create`.
+2. Players use **Join Race** to join or leave the lobby, then **Ready** to toggle their ready state.
+3. Any joined participant can start once every racer is ready and the seed is available.
+4. Starting plays a random audio cue, then shows a 0.8-second-per-step 🔴, 🔵, 🟡 countdown. The race begins on 🟢, then changes to 🏁.
+5. During the race, players use **Finish** to record the timer automatically or **Forfeit** to record a loss.
+6. The race completes only after every participant has finished or forfeited. A completed race can be replaced with a new lobby in the same channel.
 
-## Race-start options
+Finish times use `HH:MM:SS.mmm` and the tracker sorts completed racers by time. Forfeits are shown with 💩 and placed after racers who are still running.
 
-Edit [config/race_options.yaml](config/race_options.yaml) to configure optional `/race create`
-parameters. Each entry needs a user-facing `name` and a list of selectable values;
-each entry becomes its own command parameter (for example, `Randomizer preset`
-becomes `randomizer_preset:`). Discord permits up to 22 configured parameters, and
-each parameter may have up to 25 values. The chosen values appear
-in the race tracker and are passed to the seed command as the JSON dictionary
-`RACE_START_OPTIONS`.
+## Commands and controls
+
+- `/race create channel:<#race-channel> voice_channel:<voice> annotation:<text> ...` — creates a lobby. `annotation:` is optional.
+- `/race start` — starts the countdown; any joined participant may use it.
+- `/race finish` — records the current race timer as your finish time.
+- `/race status` — posts the current tracker.
+- `/flag emoji:<🇺🇸>` — saves a Unicode country flag for your racer name.
+- **Join Race** — joins the lobby; press again to leave.
+- **Ready** — toggles ready/unready.
+- **Start Race** — starts the countdown when all racers are ready.
+- **Finish** — records the current race timer.
+- **Forfeit** — records a forfeit and an automatic loss.
+
+The tracker is an embed with a yellow lobby stripe, green running stripe, and grey completed stripe. Flags appear to the left of racer names. The tracker's Markdown layout is defined in [race_tracker.md](src/speedrun_race_bot/templates/race_tracker.md).
+
+## Race options
+
+Edit [config/race_options.yaml](config/race_options.yaml) to add optional enum parameters to `/race create`:
 
 ```yaml
 race_start_options:
-  - name: Difficulty
-    value: [normal, hard, expert]
+  - name: Randomizer preset
+    value: [safe, lycan, nimble]
+  - name: Tournament Mode
+    value: [true, false]
 ```
 
-## Optional randomizer seed generation
+Each entry becomes an optional command parameter. For example, `Randomizer preset` becomes `randomizer_preset:`. Discord supports up to 22 configured parameters and 25 values for each parameter. The Randomizer preset, when selected, is shown beneath the race annotation.
 
-Set `SEED_GENERATOR_COMMAND` to a shell command to generate a seed when each
-race is created. The command is run from the project folder. It receives these
-environment variables: `RACE_GAME`, `RACE_CATEGORY`, `RACE_GUILD_ID`,
-`RACE_CHANNEL_ID`, `RACE_SEEDS_DIRECTORY`, and `RACE_START_OPTIONS`.
+## Seed generation
 
-For example, a generator command might be:
-
-```env
-SEED_GENERATOR_COMMAND=py tools/generate_seed.py
-```
-
-For a safe end-to-end test, use the included dummy generator instead:
+Set `SEED_GENERATOR_COMMAND` to run a seed generator when a lobby is created:
 
 ```env
 SEED_GENERATOR_COMMAND=py tools/print_seed_environment.py
 ```
 
-It prints the environment values received by the command and writes a temporary
-`dummy-seed.txt` file for the bot to upload.
+Generation runs in the background. The lobby appears immediately, shows the configured `alycardwalkcycle` custom emoji while generating, and cannot be started until the seed succeeds. The generated seed is uploaded as a follow-up message; its download link is shown at the bottom of the tracker.
 
-The command must write exactly one new or changed file under `seeds/`. On success,
-the bot uploads that file into the race channel and deletes the local copy. If the
-command fails or no unambiguous seed file is found, the race remains in the lobby.
+The command runs from the project directory and must create or update exactly one file under `seeds/`. The bot passes these environment variables:
 
-## Starter commands
+- `RACE_GAME`
+- `RACE_CATEGORY` (currently empty because `/race create` has no category field)
+- `RACE_GUILD_ID`
+- `RACE_CHANNEL_ID`
+- `RACE_SEEDS_DIRECTORY`
+- `RACE_START_OPTIONS` — JSON dictionary of the selected race options
 
-- `/race create channel:<#race-channel> voice_channel:<voice> annotation:<text> ...` — generate a seed and create a lobby
-- **Join Race** button — join the active lobby from its live tracker
-- **Ready** button — mark yourself ready; all racers must be ready before starting
-- **Start Race** button — start the race (host only) once everyone is ready
-- `/race status` — show the active race
-- `/race start` — command alternative to the Start Race button
-- `/race finish` — record the current race-timer value as your finish time
-- `/flag emoji:<🇺🇸>` — save a country flag shown beside your racer name
+For example, `RACE_START_OPTIONS` can be:
+
+```json
+{"Randomizer preset":"safe","Tournament Mode":"true"}
+```
+
+`tools/print_seed_environment.py` is a safe test generator: it prints all `RACE_` variables and creates a dummy seed file.
+
+## Voice and audio
+
+The bot needs **View Channel**, **Connect**, and **Speak** in the selected voice channel. Install [FFmpeg](https://ffmpeg.org/download.html) and ensure `ffmpeg` is available on `PATH`.
+
+- [audio/player_joined.mp3](audio/player_joined.mp3) plays when a racer joins.
+- [audio/ready_error.mp3](audio/ready_error.mp3) plays for readiness failures and unexpected slash-command errors during an active race.
+- Put `.mp3`, `.ogg`, `.wav`, or `.m4a` start cues in [audio/countdown](audio/countdown). One file is chosen randomly when **Start Race** is pressed.
+
+The bot disconnects from the voice channel after the countdown ends.
+
+## Local data
+
+`/flag` saves a user-to-flag mapping in `data/user_flags.json`. This local file is ignored by Git.
 
 ## Project layout
 
 ```text
+audio/
+├── countdown/              # Random race-start audio files
+├── player_joined.mp3
+└── ready_error.mp3
+config/
+└── race_options.yaml       # Dynamic /race create option groups
 src/speedrun_race_bot/
-├── cogs/races.py       # Discord slash commands
-├── config.py           # Environment configuration
-├── models.py           # Domain models (including the live tracker message ID)
-├── seed_generation.py  # Optional randomizer seed command support
-├── services/races.py   # Race state and business rules
-├── templates/          # Discord Markdown templates
-└── main.py             # Bot setup and startup
+├── cogs/races.py           # Commands, buttons, countdown, and tracker rendering
+├── models.py               # Race and entrant state
+├── seed_generation.py      # Background seed-generator command support
+├── services/               # Race, voice, and local flag services
+└── templates/race_tracker.md
+tools/
+└── print_seed_environment.py
 ```
