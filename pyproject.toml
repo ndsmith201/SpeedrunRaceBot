@@ -1,0 +1,26 @@
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "speedrun-race-bot"
+version = "0.1.0"
+description = "A Discord bot for organizing speedrun races."
+authors = []
+packages = [{ include = "speedrun_race_bot", from = "src" }]
+include = ["src/speedrun_race_bot/templates/race_tracker.md"]
+
+[tool.poetry.dependencies]
+python = ">=3.11"
+discord-py = {extras = ["voice"], version = "^2.7.1"}
+python-dotenv = ">=1.0,<2"
+pyyaml = ">=6.0,<7"
+pyttsx3 = ">=2.98,<3"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8"
+ruff = ">=0.6"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
