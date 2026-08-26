@@ -11,7 +11,8 @@ A Discord bot for organizing casual speedrun races. Race state is stored in memo
    poetry install
    ```
 
-3. Copy `.env.example` to `.env`, then set `DISCORD_TOKEN` and `RACE_GAME`.
+3. Copy `.env.example` to `.env`, then set `DISCORD_TOKEN`, `RACE_GAME`,
+   `API_BASE_URL`, and `API_KEY`.
 4. Invite the bot with the `bot` and `applications.commands` scopes.
 5. Run the bot:
 
@@ -19,7 +20,7 @@ A Discord bot for organizing casual speedrun races. Race state is stored in memo
    poetry run python -m speedrun_race_bot
    ```
 
-Set `DISCORD_GUILD_ID` during development for immediate slash-command updates in that server. Restart the bot after changing `config/race_options.yaml` so Discord can register the updated `/race create` fields.
+Set `DISCORD_GUILD_ID` during development for immediate slash-command updates in that server. Restart the bot after changing `config/config.yaml` so Discord can register the updated `/race create` fields.
 
 ## Race flow
 
@@ -30,26 +31,49 @@ Set `DISCORD_GUILD_ID` during development for immediate slash-command updates in
 5. During the race, players use **Finish** to record the timer automatically or **Forfeit** to record a loss.
 6. The race completes only after every participant has finished or forfeited. A completed race can be replaced with a new lobby in the same channel.
 
-Finish times use `HH:MM:SS.mmm` and the tracker sorts completed racers by time. Forfeits are shown with 💩 and placed after racers who are still running.
+Each racer starts at 1200 Elo. When a race completes, the bot applies a pairwise Elo update
+with a K-factor of 50 and stores each player's updated rating in `user_data`. Finish order
+determines wins and losses; forfeiting racers rank behind finishers and tie one another.
+After the local update, each player's absolute rating is sent to the private Elo API for the
+race's selected randomizer preset.
+
+Creating a Discord race also creates the API's current race with the selected randomizer
+preset and adds the race creator as its first racer.
+At the end of the countdown, the API race is started immediately before the local timer.
+Finishes are sent to the API in milliseconds. Forfeits are sent with a null finish time and
+the forfeited flag set to true.
+After every result and Elo update is synchronized, the bot finalizes the API's current race.
+Pressing Finish or Forfeit again retries incomplete finalization after a temporary API failure.
+
+When a racer joins, the bot looks up their Discord user ID in the SotN Rando API. If the
+lookup returns 404, it registers them with their Discord username and user ID before adding
+them to the API's current race and the local lobby.
+Leaving the lobby removes the racer from the API before removing them locally.
+
+Finish times use `HH:MM:SS.mmm` and the tracker sorts completed racers by time. Forfeits are shown with 🪦 and placed after racers who are still running.
 
 ## Commands and controls
 
 - `/race create channel:<#race-channel> voice_channel:<voice> annotation:<text> ...` — creates a lobby. `annotation:` is optional.
-- `/race start` — starts the countdown; any joined participant may use it.
-- `/race finish` — records the current race timer as your finish time.
-- `/race status` — posts the current tracker.
+- `/race close` — closes the current channel's race; restricted to the race host or administrators.
 - `/flag emoji:<🇺🇸>` — saves a Unicode country flag for your racer name.
+- `/stream link:<Twitch URL>` — saves a Twitch channel link for your racer name.
+- `/replay replay:<file>` — after a race finishes, participants can upload a `.sotnr` replay up to 100 KB; a clickable VHS replay link appears beside their result.
+- `/replays raceid:<id>` — downloads a ZIP of the replay folder for a race in an ephemeral response.
+- `/eloadjust raceid:<id> players:<mentions-or-ids>` — administrator-only; reverses a completed race's Elo changes and reapplies them using every racer in the supplied finish order. Races are available by ID for the lifetime of the current bot session.
+- `/newseason` — administrator-only; backs up `user_data` to CSV and resets every Elo to 1200.
+- `/playerkick player:<member>` — removes a racer; restricted to the race host or administrators.
 - **Join Race** — joins the lobby; press again to leave.
 - **Ready** — toggles ready/unready.
 - **Start Race** — starts the countdown when all racers are ready.
 - **Finish** — records the current race timer.
 - **Forfeit** — records a forfeit and an automatic loss.
 
-The tracker is an embed with a yellow lobby stripe, green running stripe, and grey completed stripe. Flags appear to the left of racer names. The tracker's Markdown layout is defined in [race_tracker.md](src/speedrun_race_bot/templates/race_tracker.md).
+The tracker is an embed with a yellow lobby stripe, green running stripe, and grey completed stripe. It displays the race creation interaction ID for use with `/replays`. Racer information uses three inline fields: Racer, Result, and ELO. Each player's flag and stream link appear beside their name in the Racer field. Result shows the finish time or forfeit status, and ELO includes any non-zero rating change in brackets. The tracker's Markdown layout is defined in [race_tracker.md](src/speedrun_race_bot/templates/race_tracker.md).
 
 ## Race options
 
-Edit [config/race_options.yaml](config/race_options.yaml) to add optional enum parameters to `/race create`:
+Edit [config/config.yaml](config/config.yaml) to add optional enum parameters to `/race create`:
 
 ```yaml
 race_start_options:
@@ -66,7 +90,7 @@ Each entry becomes an optional command parameter. For example, `Randomizer prese
 Set `SEED_GENERATOR_COMMAND` to run a seed generator when a lobby is created:
 
 ```env
-SEED_GENERATOR_COMMAND=py tools/print_seed_environment.py
+SEED_GENERATOR_COMMAND=py tools/generate_race_seed.py
 ```
 
 Generation runs in the background. The lobby appears immediately, shows the configured `alycardwalkcycle` custom emoji while generating, and cannot be started until the seed succeeds. The generated seed is uploaded as a follow-up message; its download link is shown at the bottom of the tracker.
@@ -77,6 +101,7 @@ The command runs from the project directory and must create or update exactly on
 - `RACE_CATEGORY` (currently empty because `/race create` has no category field)
 - `RACE_GUILD_ID`
 - `RACE_CHANNEL_ID`
+- `RACE_INTERACTION_ID`
 - `RACE_SEEDS_DIRECTORY`
 - `RACE_START_OPTIONS` — JSON dictionary of the selected race options
 
@@ -86,7 +111,13 @@ For example, `RACE_START_OPTIONS` can be:
 {"Randomizer preset":"safe","Tournament Mode":"true"}
 ```
 
-`tools/print_seed_environment.py` is a safe test generator: it prints all `RACE_` variables and creates a dummy seed file.
+`tools/generate_race_seed.py` generates the SotN patch using the race options supplied by the bot.
+
+On startup, the bot populates `seedbank/` in the background without delaying bot readiness. Missing
+files are generated until at least three exist, using the `beyond-confirmed-sum26te` preset with
+Music Rando and Tournament Mode enabled. Seed-bank generation does not create replay metadata.
+Creating a race with that preset claims a random banked seed instead of generating one directly,
+then queues a background refill back to three files.
 
 ## Voice and audio
 
@@ -100,7 +131,10 @@ The bot disconnects from the voice channel after the countdown ends.
 
 ## Local data
 
-`/flag` saves a user-to-flag mapping in `data/user_flags.json`. This local file is ignored by Git.
+User data is stored in the SQLite database `database/bot.sqlite3`. The `/flag` and `/stream`
+commands store the selected flag and Twitch link in each user's record, alongside their Elo
+rating. The local database
+is ignored by Git. The SQLite schema and pragmas are defined in `database/schema.sql`.
 
 ## Project layout
 
@@ -110,13 +144,25 @@ audio/
 ├── player_joined.mp3
 └── ready_error.mp3
 config/
-└── race_options.yaml       # Dynamic /race create option groups
+└── config.yaml             # Dynamic /race create option groups
+database/
+├── backups/               # Timestamped season CSV backups (ignored by Git)
+├── bot.sqlite3            # Local user database (ignored by Git)
+└── schema.sql             # SQLite schema and connection pragmas
 src/speedrun_race_bot/
-├── cogs/races.py           # Commands, buttons, countdown, and tracker rendering
-├── models.py               # Race and entrant state
+├── cogs/
+│   ├── commands.py         # Slash-command definitions and handlers
+│   └── races.py            # Buttons, countdown, and tracker rendering
+├── helpers.py              # Shared validation and conversion helpers
+├── models/
+│   ├── player.py           # Player state and player-specific mutations
+│   └── race.py             # Race state
+├── views/
+│   ├── race.py             # Persistent lobby and running-race controls
+│   └── race_message.py     # Race tracker rendering and message updates
 ├── seed_generation.py      # Background seed-generator command support
 ├── services/               # Race, voice, and local flag services
 └── templates/race_tracker.md
 tools/
-└── print_seed_environment.py
+└── generate_race_seed.py
 ```

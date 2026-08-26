@@ -1,0 +1,36 @@
+# Optional enum parameters shown by `/race create`.
+# Change these to the choices supported by your randomizer.
+race_start_options:
+  - name: Randomizer preset
+    value:
+      - battle-mage
+      - beyond
+      - beyond-confirmed-sum26te
+      - big-toss
+      - boss-rush
+      - casual
+      - Custom
+      - expedition
+      - gear-rush
+      - guarded-og
+      - leg-day
+      - lycanthrope
+      - max-rando
+      - mobility
+      - nimble
+      - nimble-lite
+      - rampage
+      - rampage-25te
+      - recycler
+      - safe
+      - stwosafe
+      - target-confirmed
+      - warlock
+  - name: Music Rando
+    value:
+      - true
+      - false
+  - name: Tournament Mode
+    value:
+      - true
+      - false
