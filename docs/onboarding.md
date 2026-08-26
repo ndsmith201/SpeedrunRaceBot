@@ -110,6 +110,16 @@ Use `npm run commit` instead of `git commit` when possible. Feature commits use 
 `fix:`, and breaking changes use `!` or a `BREAKING CHANGE:` footer. These categories provide the
 major, minor, and patch signals needed by semantic-versioning release tools.
 
+## Continuous integration
+
+GitHub Actions runs the same `npm run check` command for pull requests, pushes to `master`, and
+manual workflow runs. The test matrix covers Python 3.11 (the minimum supported version) and Python
+3.14, with Node.js 18 supplying the npm developer tools. Dependencies are installed from
+`poetry.lock` and `package-lock.json` before lint, formatting, and tests run.
+
+The workflow lives in `.github/workflows/ci.yml`. Husky is disabled in CI because the workflow
+invokes the checks directly; local hooks remain the fast feedback path before code reaches GitHub.
+
 ## Repository map
 
 ### Application package

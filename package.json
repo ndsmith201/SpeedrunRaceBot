@@ -5,8 +5,8 @@
   "description": "Developer command wrapper for the Python Speedrun Race Bot.",
   "scripts": {
     "start": "poetry run python -m speedrun_race_bot",
-    "prettier": "prettier --write README.md docs config package.json package-lock.json commitlint.config.cjs --ignore-unknown && poetry run ruff format src tools tests",
-    "prettier:check": "prettier --check README.md docs config package.json package-lock.json commitlint.config.cjs --ignore-unknown && poetry run ruff format --check src tools tests",
+    "prettier": "prettier --write README.md docs config .github package.json package-lock.json commitlint.config.cjs --ignore-unknown && poetry run ruff format src tools tests",
+    "prettier:check": "prettier --check README.md docs config .github package.json package-lock.json commitlint.config.cjs --ignore-unknown && poetry run ruff format --check src tools tests",
     "lint": "poetry run ruff check src tools tests && npm run prettier:check",
     "test": "poetry run pytest -q --basetemp=.pytest-tmp -p no:cacheprovider",
     "check": "npm run lint && npm test",
