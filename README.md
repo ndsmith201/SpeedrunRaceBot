@@ -2,6 +2,8 @@
 
 A Discord bot for organizing casual speedrun races. Race state is stored in memory, so restarting the bot clears active races and their current results.
 
+New contributors should start with the [developer onboarding guide](docs/onboarding.md).
+
 ## Setup
 
 1. Install Python 3.11 or newer.
@@ -9,6 +11,7 @@ A Discord bot for organizing casual speedrun races. Race state is stored in memo
 
    ```powershell
    poetry install
+   npm install
    ```
 
 3. Copy `.env.example` to `.env`, then set `DISCORD_TOKEN`, `RACE_GAME`,
@@ -17,10 +20,10 @@ A Discord bot for organizing casual speedrun races. Race state is stored in memo
 5. Run the bot:
 
    ```powershell
-   poetry run python -m speedrun_race_bot
+   npm run start
    ```
 
-Set `DISCORD_GUILD_ID` during development for immediate slash-command updates in that server. Restart the bot after changing `config/config.yaml` so Discord can register the updated `/race create` fields.
+Set `DISCORD_GUILD_ID` during development for immediate slash-command updates in that server. Restart the bot after changing `config/race_options.yaml` so Discord can register the updated `/race create` fields.
 
 ## Race flow
 
@@ -73,7 +76,7 @@ The tracker is an embed with a yellow lobby stripe, green running stripe, and gr
 
 ## Race options
 
-Edit [config/config.yaml](config/config.yaml) to add optional enum parameters to `/race create`:
+Edit [config/race_options.yaml](config/race_options.yaml) to add optional enum parameters to `/race create`:
 
 ```yaml
 race_start_options:
@@ -108,7 +111,7 @@ The command runs from the project directory and must create or update exactly on
 For example, `RACE_START_OPTIONS` can be:
 
 ```json
-{"Randomizer preset":"safe","Tournament Mode":"true"}
+{ "Randomizer preset": "safe", "Tournament Mode": "true" }
 ```
 
 `tools/generate_race_seed.py` generates the SotN patch using the race options supplied by the bot.
@@ -138,31 +141,33 @@ is ignored by Git. The SQLite schema and pragmas are defined in `database/schema
 
 ## Project layout
 
+The Python package is organized by responsibility. Domain entities do not know about Discord
+or storage, race workflows own one lifecycle concern each, and Discord command/view modules stay
+thin. Object construction is centralized in `discord_ui/extension.py`.
+
 ```text
-audio/
-├── countdown/              # Random race-start audio files
-├── player_joined.mp3
-└── ready_error.mp3
 config/
-└── config.yaml             # Dynamic /race create option groups
+└── race_options.yaml       # Dynamic /race create option groups
 database/
-├── backups/               # Timestamped season CSV backups (ignored by Git)
-├── bot.sqlite3            # Local user database (ignored by Git)
-└── schema.sql             # SQLite schema and connection pragmas
+├── backups/                # Timestamped season CSV backups (ignored)
+├── bot.sqlite3             # Local user database (ignored)
+└── schema.sql              # SQLite schema and pragmas
 src/speedrun_race_bot/
-├── cogs/
-│   ├── commands.py         # Slash-command definitions and handlers
-│   └── races.py            # Buttons, countdown, and tracker rendering
-├── helpers.py              # Shared validation and conversion helpers
-├── models/
-│   ├── player.py           # Player state and player-specific mutations
-│   └── race.py             # Race state
-├── views/
-│   ├── race.py             # Persistent lobby and running-race controls
-│   └── race_message.py     # Race tracker rendering and message updates
-├── seed_generation.py      # Background seed-generator command support
-├── services/               # Race, voice, and local flag services
-└── templates/race_tracker.md
+├── bot.py                  # Bot startup and command synchronization
+├── settings.py             # Environment-backed application settings
+├── domain/                 # Race and player entities
+├── race/                   # Lifecycle, countdown, results, Elo, replay, and seed workflows
+├── persistence/            # SQLite repositories
+├── integrations/           # Randomizer API, seed process, and Discord voice adapters
+├── discord_ui/
+│   ├── commands/           # Commands grouped by race, profile, replay, and admin use
+│   ├── controls.py         # Persistent race message buttons
+│   ├── race_tracker.py     # Tracker embed rendering and updates
+│   ├── tracker_template.py # Markdown template parser
+│   └── extension.py        # Dependency composition and Discord registration
+└── templates/
+    └── race_tracker.md     # Tracker copy and field fragments
 tools/
-└── generate_race_seed.py
+├── generate_race_seed.py   # Stable executable entry point used by .env
+└── seed_generator/         # Config, naming, process, SotN, and CLI modules
 ```
