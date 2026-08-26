@@ -3,11 +3,7 @@ name: CI
 on:
   push:
     branches:
-<<<<<<< Updated upstream
-      - master
-=======
       - main
->>>>>>> Stashed changes
   pull_request:
   workflow_dispatch:
 
