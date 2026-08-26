@@ -10,6 +10,8 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+node_modules/
+.npm-cache/
 /assets/
 /patches/*
 !/patches/.gitkeep
