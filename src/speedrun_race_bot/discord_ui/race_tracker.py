@@ -72,6 +72,7 @@ class RaceTracker:
             ),
             race_id_line=render_section("race_id", value=str(race.interaction_id)),
             seed_line=seed_line,
+            feedback_line=render_section("feedback_link"),
             racers=racer_list,
         ).strip()
 

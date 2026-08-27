@@ -55,6 +55,9 @@ ELO
 <!-- section: seed_error -->
 **Seed:** *Generation failed*
 <!-- endsection -->
+<!-- section: feedback_link -->
+[Report an issue or request a feature](https://github.com/ndsmith201/SpeedrunRaceBot/issues/new?template=feedback.yml)
+<!-- endsection -->
 ## {title_prefix}RACE: {annotation_line}
 {randomizer_preset_line}
 {race_id_line}
@@ -65,3 +68,5 @@ ELO
 *Use **Join Race** to enter, then **Ready** when you are prepared. Any participant can start once everyone is ready.*
 
 {seed_line}
+
+{feedback_line}
