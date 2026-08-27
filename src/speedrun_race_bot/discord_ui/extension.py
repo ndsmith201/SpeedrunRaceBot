@@ -35,3 +35,4 @@ async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(CommandErrorHandler(bot, coordinator.service, coordinator.voice_announcer))
     bot.add_view(coordinator.join_view)
     bot.add_view(coordinator.running_view)
+    bot.add_view(coordinator.async_view)

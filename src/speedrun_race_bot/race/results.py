@@ -52,10 +52,14 @@ class RaceResults:
             except ValueError as error:
                 return str(error)
             entrant = race.entrants[interaction.user.id]
-        if not entrant.api_result_synced:
+        if race.is_async:
+            entrant.mark_api_result_synced()
+        elif not entrant.api_result_synced:
+            if not entrant.api_name:
+                entrant.api_name = interaction.user.name
             try:
                 await self.api.finish_current_racer(
-                    interaction.user.name,
+                    entrant.api_name,
                     finish_time_to_milliseconds(entrant.finish_time or "00:00:00.000"),
                     False,
                 )
@@ -86,13 +90,28 @@ class RaceResults:
             except ValueError as error:
                 return str(error)
             entrant = race.entrants[interaction.user.id]
-        if not entrant.api_result_synced:
+        if race.is_async:
+            entrant.mark_api_result_synced()
+        elif not entrant.api_result_synced:
+            if not entrant.api_name:
+                entrant.api_name = interaction.user.name
             try:
-                await self.api.finish_current_racer(interaction.user.name, None, True)
+                await self.api.finish_current_racer(entrant.api_name, None, True)
             except RandoApiError as error:
                 logger.warning("Could not synchronize racer forfeit: %s", error)
                 return f"Your forfeit was recorded locally, but API synchronization failed: {error}"
             entrant.mark_api_result_synced()
+        elo_error = await self.update_elo_if_complete(race)
+        await self.tracker.update(race)
+        return elo_error
+
+    async def finalize_async_race(self, race: Race) -> str | None:
+        """Close local-only async submissions and publish final results."""
+        self.races.complete_async(race)
+        for entrant in race.entrants.values():
+            if not entrant.api_result_synced:
+                entrant.mark_api_result_synced()
+
         elo_error = await self.update_elo_if_complete(race)
         await self.tracker.update(race)
         return elo_error
@@ -111,6 +130,10 @@ class RaceResults:
             }
             race.elo_changes = self.elo.apply(placements)
             race.elo_processed = True
+        if race.is_async:
+            race.elo_api_synced = True
+            race.api_race_finished = True
+            return None
         if not race.elo_api_synced:
             preset = self._preset(race)
             if not preset:

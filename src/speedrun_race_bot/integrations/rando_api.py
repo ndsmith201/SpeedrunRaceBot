@@ -16,9 +16,9 @@ class RandoApiClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
 
-    async def ensure_user(self, username: str, user_id: int) -> None:
-        """Register a Discord user only when lookup by Discord ID returns 404."""
-        await asyncio.to_thread(self._ensure_user, username, user_id)
+    async def ensure_user(self, username: str, user_id: int) -> str:
+        """Return the API player name, registering the Discord user when missing."""
+        return await asyncio.to_thread(self._ensure_user, username, user_id)
 
     async def set_elo(self, user_id: int, preset: str, elo: int) -> None:
         """Set a user's absolute Elo for one randomizer preset."""
@@ -184,37 +184,54 @@ class RandoApiClient:
             reason = getattr(error, "reason", str(error))
             raise RandoApiError(f"Elo update failed: {reason}") from error
 
-    def _ensure_user(self, username: str, user_id: int) -> None:
+    def _ensure_user(self, username: str, user_id: int) -> str:
         lookup = Request(
             f"{self.base_url}/user_by_id/{user_id}",
             headers={"Accept": "application/json"},
         )
         try:
-            with urlopen(lookup, timeout=10):
-                return
+            with urlopen(lookup, timeout=10) as response:
+                return self._player_name_from_response(response.read(), "user lookup")
         except HTTPError as error:
             if error.code != 404:
                 raise RandoApiError(f"user lookup returned HTTP {error.code}") from error
         except (URLError, TimeoutError) as error:
             reason = getattr(error, "reason", str(error))
-            print(reason)
             raise RandoApiError(f"user lookup failed: {reason}") from error
 
-        # create = Request(
-        #     f"{self.base_url}/private/user",
-        #     data=body,
-        #     method="POST",
-        #     headers={
-        #         "Accept": "application/json",
-        #         "Authorization": self.api_key,
-        #         "Content-Type": "application/json",
-        #     },
-        # )
-        # try:
-        #     with urlopen(create, timeout=10):
-        #         return
-        # except HTTPError as error:
-        #     raise RandoApiError(f"user registration returned HTTP {error.code}") from error
-        # except (URLError, TimeoutError) as error:
-        #     reason = getattr(error, "reason", str(error))
-        #     raise RandoApiError(f"user registration failed: {reason}") from error
+        body = json.dumps({"username": username, "user_id": str(user_id)}).encode("utf-8")
+        create = Request(
+            f"{self.base_url}/private/user",
+            data=body,
+            method="POST",
+            headers={
+                "Accept": "application/json",
+                "Authorization": self.api_key,
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urlopen(create, timeout=10) as response:
+                response_body = response.read()
+                if not response_body:
+                    return username
+                try:
+                    return self._player_name_from_response(response_body, "user registration")
+                except RandoApiError:
+                    return username
+        except HTTPError as error:
+            raise RandoApiError(f"user registration returned HTTP {error.code}") from error
+        except (URLError, TimeoutError) as error:
+            reason = getattr(error, "reason", str(error))
+            raise RandoApiError(f"user registration failed: {reason}") from error
+
+    @staticmethod
+    def _player_name_from_response(response_body: bytes, operation: str) -> str:
+        try:
+            payload = json.loads(response_body)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise RandoApiError(f"{operation} returned invalid JSON") from error
+        player_name = payload.get("nickname") or payload.get("username")
+        if not isinstance(player_name, str) or not player_name.strip():
+            raise RandoApiError(f"{operation} response did not include a player name")
+        return player_name

@@ -17,7 +17,7 @@ class RaceStatus(StrEnum):
 class Race:
     guild_id: int
     channel_id: int
-    voice_channel_id: int
+    voice_channel_id: int | None
     interaction_id: int
     host_id: int
     game: str
@@ -42,4 +42,13 @@ class Race:
     elo_api_synced: bool = False
     api_race_finished: bool = False
     elo_changes: dict[int, int] = field(default_factory=dict)
+    async_closes_at: datetime | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    @property
+    def is_async(self) -> bool:
+        return self.async_closes_at is not None
+
+    @property
+    def results_hidden(self) -> bool:
+        return self.is_async and self.status is RaceStatus.RUNNING and not self.closed

@@ -7,6 +7,18 @@
 <!-- section: race_id -->
 **RaceID:** `{value}`
 <!-- endsection -->
+<!-- section: async_closes -->
+**Closes:** {absolute} ({relative})
+<!-- endsection -->
+<!-- section: standard_instructions -->
+*Use **Join Race** to enter, then **Ready** when you are prepared. Any participant can start once everyone is ready.*
+<!-- endsection -->
+<!-- section: async_running_instructions -->
+*Join at any time before close. Finish times and standings remain hidden until the deadline.*
+<!-- endsection -->
+<!-- section: async_complete_instructions -->
+*This async race is closed. Final results are shown above.*
+<!-- endsection -->
 <!-- section: column_racer_title -->
 Racer
 <!-- endsection -->
@@ -61,11 +73,12 @@ ELO
 ## {title_prefix}RACE: {annotation_line}
 {randomizer_preset_line}
 {race_id_line}
+{async_close_line}
 
 {racers}
 <!-- player-columns -->
 
-*Use **Join Race** to enter, then **Ready** when you are prepared. Any participant can start once everyone is ready.*
+{instructions}
 
 {seed_line}
 

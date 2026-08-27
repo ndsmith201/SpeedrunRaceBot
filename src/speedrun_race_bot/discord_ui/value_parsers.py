@@ -1,7 +1,26 @@
 """Validation and normalization for values entered through Discord."""
 
 import re
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
+
+ASYNC_RACE_CLOSE_CHOICES = (
+    ("30 mins", 30 * 60),
+    ("1 hour", 60 * 60),
+    ("5 hours", 5 * 60 * 60),
+    ("12 hours", 12 * 60 * 60),
+    ("24 hours", 24 * 60 * 60),
+    ("3 days", 3 * 24 * 60 * 60),
+    ("1 week", 7 * 24 * 60 * 60),
+)
+ASYNC_RACE_CLOSE_SECONDS = frozenset(seconds for _, seconds in ASYNC_RACE_CLOSE_CHOICES)
+
+
+def async_race_close_time(duration_seconds: int, *, now: datetime | None = None) -> datetime | None:
+    """Convert an allowed async-race duration into an absolute UTC deadline."""
+    if duration_seconds not in ASYNC_RACE_CLOSE_SECONDS:
+        return None
+    return (now or datetime.now(UTC)) + timedelta(seconds=duration_seconds)
 
 
 def is_country_flag_emoji(value: str) -> bool:
