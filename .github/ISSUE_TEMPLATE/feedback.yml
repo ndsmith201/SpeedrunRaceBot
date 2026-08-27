@@ -1,0 +1,66 @@
+name: Bug report or feature request
+description: Report a bot problem or suggest an improvement
+title: "[Feedback]: "
+body:
+  - type: dropdown
+    id: feedback_type
+    attributes:
+      label: Feedback type
+      description: Choose the option that best matches your request.
+      options:
+        - Bug report
+        - Feature request
+        - Documentation improvement
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Briefly describe the problem or feature you would like.
+      placeholder: What happened, or what should the bot be able to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Reproduction steps or use case
+      description: For a bug, explain how to reproduce it. For a feature, describe when it would be useful.
+      placeholder: |
+        1. Create or join a race...
+        2. Use the following command or button...
+        3. Describe the result and what you expected instead.
+    validations:
+      required: true
+
+  - type: input
+    id: race_id
+    attributes:
+      label: RaceID
+      description: If this happened during a race, copy its RaceID from the tracker.
+      placeholder: "123456789012345678"
+
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed solution
+      description: Share an implementation or user-experience idea if you have one.
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context
+      description: Add screenshots, logs with secrets removed, or other useful details.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues for a duplicate.
+          required: true
+        - label: I removed tokens, API keys, and other private information from this report.
+          required: true

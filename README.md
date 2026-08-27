@@ -72,7 +72,7 @@ Finish times use `HH:MM:SS.mmm` and the tracker sorts completed racers by time. 
 - **Finish** — records the current race timer.
 - **Forfeit** — records a forfeit and an automatic loss.
 
-The tracker is an embed with a yellow lobby stripe, green running stripe, and grey completed stripe. It displays the race creation interaction ID for use with `/replays`. Racer information uses three inline fields: Racer, Result, and ELO. Each player's flag and stream link appear beside their name in the Racer field. Result shows the finish time or forfeit status, and ELO includes any non-zero rating change in brackets. The tracker's Markdown layout is defined in [race_tracker.md](src/speedrun_race_bot/templates/race_tracker.md).
+The tracker is an embed with a yellow lobby stripe, green running stripe, and grey completed stripe. It displays the race creation interaction ID for use with `/replays`. Racer information uses three inline fields: Racer, Result, and ELO. Each player's flag and stream link appear beside their name in the Racer field. Result shows the finish time or forfeit status, and ELO includes any non-zero rating change in brackets. A feedback link opens the repository's structured bug-report and feature-request form. The tracker's Markdown layout is defined in [race_tracker.md](src/speedrun_race_bot/templates/race_tracker.md).
 
 ## Race options
 
