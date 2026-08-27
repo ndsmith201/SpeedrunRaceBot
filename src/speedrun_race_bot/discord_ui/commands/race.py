@@ -7,6 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from speedrun_race_bot.discord_ui.create_options import StartOption
+from speedrun_race_bot.discord_ui.value_parsers import ASYNC_RACE_CLOSE_CHOICES
 from speedrun_race_bot.domain import RaceStatus
 from speedrun_race_bot.integrations.rando_api import RandoApiError
 from speedrun_race_bot.race.coordinator import RaceCoordinator
@@ -20,6 +21,7 @@ class RaceCommands(commands.Cog):
     def __init__(self, coordinator: RaceCoordinator, start_options: list[StartOption]) -> None:
         self.coordinator = coordinator
         self._register_create_command(start_options)
+        self._register_async_command(start_options)
 
     def _register_create_command(self, start_options: list[StartOption]) -> None:
         """Build `/race create` with one enum parameter per YAML option group."""
@@ -61,6 +63,40 @@ class RaceCommands(commands.Cog):
                 name="create",
                 description="Create a speedrun race lobby",
                 callback=namespace["create_callback"],
+            )
+        )
+
+    def _register_async_command(self, start_options: list[StartOption]) -> None:
+        """Build an immediately-running async race command from configured presets."""
+        preset_option = next(
+            (option for option in start_options if option.name.casefold() == "randomizer preset"),
+            None,
+        )
+        if not preset_option:
+            return
+
+        async def async_callback(
+            interaction: discord.Interaction, preset: str, closes_at: int
+        ) -> None:
+            await self.coordinator.create_async_race(interaction, preset, closes_at)
+
+        async_callback = app_commands.describe(
+            preset="Randomizer preset used for this race",
+            closes_at="How long the async race remains open",
+        )(async_callback)
+        async_callback = app_commands.choices(
+            preset=[app_commands.Choice(name=value, value=value) for value in preset_option.values],
+            closes_at=[
+                app_commands.Choice(name=label, value=seconds)
+                for label, seconds in ASYNC_RACE_CLOSE_CHOICES
+            ],
+        )(async_callback)
+        self.race.remove_command("async")
+        self.race.add_command(
+            app_commands.Command(
+                name="async",
+                description="Start an async race that reveals results at a deadline",
+                callback=async_callback,
             )
         )
 
@@ -113,7 +149,8 @@ class RaceCommands(commands.Cog):
             )
             return
         try:
-            await self.coordinator.rando_api.remove_current_racer(player.name)
+            entrant = race.entrants[player.id]
+            await self.coordinator.rando_api.remove_current_racer(entrant.api_name or player.name)
             self.coordinator.service.leave(race, player.id)
         except (RandoApiError, ValueError) as error:
             await interaction.response.send_message(str(error), ephemeral=True)

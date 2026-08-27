@@ -10,8 +10,8 @@ class TrackerTemplate:
     body: str
     sections: dict[str, str]
 
-    def section(self, name: str, **values: str) -> str:
-        return self.sections[name].format(**values).rstrip("\n")
+    def section(self, section_name: str, **values: str) -> str:
+        return self.sections[section_name].format(**values).rstrip("\n")
 
 
 def load_tracker_template() -> TrackerTemplate:

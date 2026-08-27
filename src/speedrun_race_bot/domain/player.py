@@ -7,6 +7,7 @@ from dataclasses import dataclass
 class Player:
     user_id: int
     display_name: str
+    api_name: str | None = None
     is_ready: bool = False
     finish_time: str | None = None
     finish_position: int | None = None

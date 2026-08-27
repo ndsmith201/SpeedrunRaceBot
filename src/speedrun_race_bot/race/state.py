@@ -31,10 +31,20 @@ class RaceState:
         race.closed = True
         self._races_by_channel.pop(race.channel_id)
 
-    def join(self, race: Race, user_id: int, display_name: str) -> None:
-        if race.status is not RaceStatus.LOBBY:
+    def join(
+        self, race: Race, user_id: int, display_name: str, api_name: str | None = None
+    ) -> None:
+        async_race_is_open = (
+            race.is_async
+            and race.status is RaceStatus.RUNNING
+            and race.async_closes_at is not None
+            and datetime.now(UTC) < race.async_closes_at
+        )
+        if race.status is not RaceStatus.LOBBY and not async_race_is_open:
             raise ValueError("The race has already started.")
-        race.entrants.setdefault(user_id, Player(user_id, display_name))
+        entrant = race.entrants.setdefault(user_id, Player(user_id, display_name, api_name))
+        if api_name and not entrant.api_name:
+            entrant.api_name = api_name
 
     def leave(self, race: Race, user_id: int) -> None:
         if race.status is not RaceStatus.LOBBY:
@@ -76,11 +86,23 @@ class RaceState:
         race.status = RaceStatus.RUNNING
         race.started_at = datetime.now(UTC)
 
+    def start_async(self, race: Race, *, started_at: datetime | None = None) -> None:
+        if not race.is_async:
+            raise ValueError("That is not an async race.")
+        if race.status is not RaceStatus.LOBBY:
+            raise ValueError("This race cannot be started now.")
+        race.status = RaceStatus.RUNNING
+        race.started_at = started_at or datetime.now(UTC)
+
     def finish(self, race: Race, user_id: int, display_name: str) -> None:
         if race.status is not RaceStatus.RUNNING:
             raise ValueError("The race has not started yet.")
         if not race.started_at:
             raise ValueError("The race timer is unavailable.")
+        if race.is_async and race.async_closes_at and datetime.now(UTC) >= race.async_closes_at:
+            raise ValueError("This async race is closed.")
+        if race.is_async and user_id not in race.entrants:
+            raise ValueError("Join the async race before submitting a finish.")
         entrant = race.entrants.setdefault(user_id, Player(user_id, display_name))
         finish_position = 1 + sum(
             other.finish_position is not None for other in race.entrants.values()
@@ -97,9 +119,26 @@ class RaceState:
         entrant.record_forfeit()
         self._complete_if_all_results_recorded(race)
 
+    def complete_async(self, race: Race) -> None:
+        """Close async entry submission and forfeit racers without a result."""
+        if not race.is_async:
+            raise ValueError("That is not an async race.")
+        if race.status is RaceStatus.COMPLETE:
+            return
+        if race.status is not RaceStatus.RUNNING:
+            raise ValueError("The async race is not currently running.")
+        for entrant in race.entrants.values():
+            if not entrant.has_result:
+                entrant.record_forfeit()
+        race.status = RaceStatus.COMPLETE
+
     @staticmethod
     def _complete_if_all_results_recorded(race: Race) -> None:
-        if race.entrants and all(entrant.has_result for entrant in race.entrants.values()):
+        if (
+            not race.is_async
+            and race.entrants
+            and all(entrant.has_result for entrant in race.entrants.values())
+        ):
             race.status = RaceStatus.COMPLETE
 
     @staticmethod

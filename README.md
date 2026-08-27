@@ -34,6 +34,17 @@ Set `DISCORD_GUILD_ID` during development for immediate slash-command updates in
 5. During the race, players use **Finish** to record the timer automatically or **Forfeit** to record a loss.
 6. The race completes only after every participant has finished or forfeited. A completed race can be replaced with a new lobby in the same channel.
 
+Async races use the **/race async** command with a preset and selectable close duration in the
+current text channel. Available durations are 30 minutes, 1 hour, 5 hours, 12 hours, 24 hours,
+3 days, and 1 week. They start immediately without voice, readiness, or a countdown. Racers may
+join until the deadline and receive private confirmation when they finish or forfeit, while the
+tracker hides all submitted times, standings, and result markers. At the deadline, racers without
+a result are forfeited automatically, local Elo is calculated, and the tracker reveals the final
+results. Async races never call the SotN race API, so a normal API-backed race can run at the same
+time in another channel. The bot pins the async tracker when it is posted and needs **Manage
+Messages** permission to do so. Because race state is in memory, restarting the bot cancels an
+active async race and its scheduled close.
+
 Each racer starts at 1200 Elo. When a race completes, the bot applies a pairwise Elo update
 with a K-factor of 50 and stores each player's updated rating in `user_data`. Finish order
 determines wins and losses; forfeiting racers rank behind finishers and tie one another.
@@ -48,9 +59,9 @@ the forfeited flag set to true.
 After every result and Elo update is synchronized, the bot finalizes the API's current race.
 Pressing Finish or Forfeit again retries incomplete finalization after a temporary API failure.
 
-When a racer joins, the bot looks up their Discord user ID in the SotN Rando API. If the
-lookup returns 404, it registers them with their Discord username and user ID before adding
-them to the API's current race and the local lobby.
+When a racer joins, the bot looks up their Discord user ID in the SotN Rando API and uses the
+returned API username for current-race operations. If the lookup returns 404, it registers them
+with their Discord username and user ID before adding them to the API's current race and the local lobby.
 Leaving the lobby removes the racer from the API before removing them locally.
 
 Finish times use `HH:MM:SS.mmm` and the tracker sorts completed racers by time. Forfeits are shown with 🪦 and placed after racers who are still running.
@@ -58,6 +69,7 @@ Finish times use `HH:MM:SS.mmm` and the tracker sorts completed racers by time. 
 ## Commands and controls
 
 - `/race create channel:<#race-channel> voice_channel:<voice> annotation:<text> ...` — creates a lobby. `annotation:` is optional.
+- `/race async preset:<preset> closes_at:<duration>` — starts immediately in the current channel and converts the selected duration into its close timestamp; results remain hidden until then.
 - `/race close` — closes the current channel's race; restricted to the race host or administrators.
 - `/flag emoji:<🇺🇸>` — saves a Unicode country flag for your racer name.
 - `/stream link:<Twitch URL>` — saves a Twitch channel link for your racer name.
@@ -66,7 +78,7 @@ Finish times use `HH:MM:SS.mmm` and the tracker sorts completed racers by time. 
 - `/eloadjust raceid:<id> players:<mentions-or-ids>` — administrator-only; reverses a completed race's Elo changes and reapplies them using every racer in the supplied finish order. Races are available by ID for the lifetime of the current bot session.
 - `/newseason` — administrator-only; backs up `user_data` to CSV and resets every Elo to 1200.
 - `/playerkick player:<member>` — removes a racer; restricted to the race host or administrators.
-- **Join Race** — joins the lobby; press again to leave.
+- **Join Race** — joins the lobby; press again to leave. In a running async race, joining is allowed until its deadline and entrants cannot leave.
 - **Ready** — toggles ready/unready.
 - **Start Race** — starts the countdown when all racers are ready.
 - **Finish** — records the current race timer.
