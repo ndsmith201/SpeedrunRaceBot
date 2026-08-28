@@ -24,3 +24,9 @@ CREATE TABLE IF NOT EXISTS race_players (
     FOREIGN KEY (race_id) REFERENCES races(interaction_id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES user_data(user_id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS active_races (
+    race_id INTEGER PRIMARY KEY,
+    snapshot TEXT NOT NULL,
+    FOREIGN KEY (race_id) REFERENCES races(interaction_id) ON DELETE CASCADE
+);

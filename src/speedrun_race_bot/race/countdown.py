@@ -41,6 +41,7 @@ class RaceCountdown:
             return
         race.countdown_in_progress = True
         race.countdown_starter_id = interaction.user.id
+        self.races.save(race)
         await self.tracker.update(race)
         task = asyncio.create_task(self._run(race))
         self.tasks[race.interaction_id] = task
@@ -57,6 +58,7 @@ class RaceCountdown:
         race.countdown_in_progress = False
         race.countdown_value = None
         race.countdown_starter_id = None
+        self.races.save(race)
 
     async def _run(self, race: Race) -> None:
         try:
@@ -73,6 +75,7 @@ class RaceCountdown:
                 await self.voice.announce_random_countdown(voice_client)
             for count in (3, 2, 1):
                 race.countdown_value = count
+                self.races.save(race)
                 await self.tracker.update(race)
                 await asyncio.sleep(0.8)
             race.countdown_value = None
@@ -81,9 +84,11 @@ class RaceCountdown:
             self.races.start(race, race.countdown_starter_id or race.host_id)
             race.countdown_starter_id = None
             race.show_go_emoji = True
+            self.races.save(race)
             await self.tracker.update(race)
             await asyncio.sleep(0.8)
             race.show_go_emoji = False
+            self.races.save(race)
             await self.tracker.update(race)
             if voice_client and voice_client.is_connected():
                 await voice_client.disconnect()
@@ -91,6 +96,7 @@ class RaceCountdown:
             race.countdown_in_progress = False
             race.countdown_value = None
             race.countdown_starter_id = None
+            self.races.save(race)
             logger.exception("Could not complete countdown for %s", race.game)
             await self.tracker.update(race)
 

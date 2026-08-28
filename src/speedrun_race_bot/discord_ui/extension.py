@@ -36,3 +36,4 @@ async def setup(bot: commands.Bot) -> None:
     bot.add_view(coordinator.join_view)
     bot.add_view(coordinator.running_view)
     bot.add_view(coordinator.async_view)
+    coordinator.restore_persisted_races()

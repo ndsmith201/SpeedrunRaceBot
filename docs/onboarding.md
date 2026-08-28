@@ -9,8 +9,9 @@ The bot coordinates Symphony of the Night races in Discord. It creates race lobb
 readiness and countdowns, generates or claims randomizer seeds, records results, calculates Elo,
 stores replays, and synchronizes race state with the SotN race API.
 
-Active race state and RaceID lookup are held in memory. Compact race history, racer membership,
-user profiles, and Elo ratings are stored in SQLite. Restarting the bot clears active workflows.
+Compact race history, racer membership, user profiles, and Elo ratings are stored in SQLite. A
+versioned JSON snapshot restores current races after a restart, including async deadlines and
+interrupted seed generation.
 
 ## Prerequisites
 
@@ -231,11 +232,14 @@ with buffered-only logging; seeing the randomizer output is important for diagno
 
 ## State and persistence rules
 
-- `RaceState` owns live lifecycle rules, active channel lookup, and in-process RaceID history.
+- `RaceState` owns lifecycle rules and caches restored races for the running process.
 - `RaceRepository` stores the race interaction ID, tracker channel/message IDs, start and end
   timestamps, and JSON result.
 - `race_players` links races to `user_data` through a many-to-many relationship.
-- Closing a race removes it from active channel lookup while leaving the compact database record.
+- `active_races` stores a versioned JSON snapshot for the current race in each channel.
+- Startup restores current snapshots, resets interrupted countdown UI, reschedules seed generation
+  and async deadlines, and refreshes the tracker message.
+- Closing or replacing a race deletes its live snapshot while preserving compact history.
 - `RaceRepository` and `UserRepository` own SQLite access and always close their connections.
 - `EloService.adjust` reverses the race's stored deltas before applying a corrected order.
 - A corrected Elo order must contain every original racer exactly once.
