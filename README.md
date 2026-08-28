@@ -149,9 +149,10 @@ The bot disconnects from the voice channel after the countdown ends.
 
 User and race data are stored in the SQLite database `database/bot.sqlite3`. The `/flag` and
 `/stream` commands store the selected flag and Twitch link in each user's record, alongside their
-Elo rating. The `races` table stores an interaction ID, start and end timestamps, and a JSON result
-summary. `race_players` links races and `user_data` through a many-to-many relationship. The local
-database is ignored by Git. The SQLite schema and pragmas are defined in `database/schema.sql`.
+Elo rating. The `races` table stores an interaction ID, Discord channel and tracker message IDs,
+start and end timestamps, and a JSON result summary. `race_players` links races and `user_data`
+through a many-to-many relationship. The local database is ignored by Git. The SQLite schema and
+pragmas are defined in `database/schema.sql`.
 
 ## Project layout
 

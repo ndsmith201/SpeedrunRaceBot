@@ -23,9 +23,14 @@ class RaceState:
         if existing_race and existing_race.status is not RaceStatus.COMPLETE:
             raise ValueError("This channel already has an active race.")
         if self.repository:
-            self.repository.create(race.interaction_id)
+            self.repository.create(race.interaction_id, race.channel_id)
         self._remember(race)
         return race
+
+    def record_tracker_message(self, race: Race, message_id: int) -> None:
+        race.status_message_id = message_id
+        if self.repository:
+            self.repository.set_message_id(race.interaction_id, message_id)
 
     def close(self, race: Race) -> None:
         """Remove a race from its channel while retaining RaceID history."""

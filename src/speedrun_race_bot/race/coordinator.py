@@ -154,7 +154,8 @@ class RaceCoordinator:
             else:
                 await interaction.response.send_message(str(error), ephemeral=True)
             return
-        await self.race_message.create(race, channel)
+        status_message = await self.race_message.create(race, channel)
+        self.service.record_tracker_message(race, status_message.id)
         if self.seed_delivery.enabled and not is_custom_preset:
             self.seed_delivery.schedule(race, interaction.id)
         await self.voice_announcer.announce_player_joined(voice_client)
@@ -220,6 +221,7 @@ class RaceCoordinator:
             return
 
         status_message = await self.race_message.create(race, channel)
+        self.service.record_tracker_message(race, status_message.id)
         pin_warning = ""
         try:
             await status_message.pin(reason=f"Async race {race.interaction_id}")

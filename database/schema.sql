@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS user_data (
 
 CREATE TABLE IF NOT EXISTS races (
     interaction_id INTEGER PRIMARY KEY,
+    channel_id INTEGER NOT NULL,
+    message_id INTEGER,
     start_time TEXT,
     end_time TEXT,
     result TEXT

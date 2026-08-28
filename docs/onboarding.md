@@ -232,7 +232,8 @@ with buffered-only logging; seeing the randomizer output is important for diagno
 ## State and persistence rules
 
 - `RaceState` owns live lifecycle rules, active channel lookup, and in-process RaceID history.
-- `RaceRepository` stores only the race interaction ID, start and end timestamps, and JSON result.
+- `RaceRepository` stores the race interaction ID, tracker channel/message IDs, start and end
+  timestamps, and JSON result.
 - `race_players` links races to `user_data` through a many-to-many relationship.
 - Closing a race removes it from active channel lookup while leaving the compact database record.
 - `RaceRepository` and `UserRepository` own SQLite access and always close their connections.

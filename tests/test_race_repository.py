@@ -40,7 +40,14 @@ def test_races_table_contains_only_compact_history_fields(tmp_path: Path) -> Non
             ).fetchall()
         }
 
-    assert columns == {"interaction_id", "start_time", "end_time", "result"}
+    assert columns == {
+        "interaction_id",
+        "channel_id",
+        "message_id",
+        "start_time",
+        "end_time",
+        "result",
+    }
     assert "race_players" in tables
     assert "racers" not in tables
 
@@ -107,15 +114,18 @@ def test_lifecycle_stores_timestamps_and_json_result(tmp_path: Path) -> None:
     ]
 
 
-def test_live_race_aggregate_is_not_rehydrated_from_history(tmp_path: Path) -> None:
+def test_tracker_message_reference_survives_restart(tmp_path: Path) -> None:
     database_path = tmp_path / "bot.sqlite3"
     repository, users = make_repositories(database_path)
     users.ensure_user(10)
     races = RaceState(repository)
     race = races.create(make_race())
     races.join(race, 10, "First")
+    races.record_tracker_message(race, 99)
 
-    restarted_races = RaceState(RaceRepository(database_path, SCHEMA_PATH))
+    restarted_repository = RaceRepository(database_path, SCHEMA_PATH)
+    restarted_races = RaceState(restarted_repository)
 
+    assert restarted_repository.get_message_reference(race.interaction_id) == (race.channel_id, 99)
     assert restarted_races.get(race.channel_id) is None
     assert restarted_races.get_by_interaction_id(race.interaction_id) is None

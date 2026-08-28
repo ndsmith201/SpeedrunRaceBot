@@ -15,12 +15,29 @@ class RaceRepository:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
-    def create(self, interaction_id: int) -> None:
+    def create(self, interaction_id: int, channel_id: int) -> None:
         with self.connect() as connection:
             connection.execute(
-                "INSERT INTO races (interaction_id) VALUES (?)",
-                (interaction_id,),
+                "INSERT INTO races (interaction_id, channel_id) VALUES (?, ?)",
+                (interaction_id, channel_id),
             )
+
+    def set_message_id(self, interaction_id: int, message_id: int) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE races SET message_id = ? WHERE interaction_id = ?",
+                (message_id, interaction_id),
+            )
+
+    def get_message_reference(self, interaction_id: int) -> tuple[int, int] | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT channel_id, message_id FROM races WHERE interaction_id = ?",
+                (interaction_id,),
+            ).fetchone()
+        if not row or row["message_id"] is None:
+            return None
+        return int(row["channel_id"]), int(row["message_id"])
 
     def add_player(self, interaction_id: int, user_id: int) -> None:
         with self.connect() as connection:
