@@ -18,7 +18,7 @@ class ReplayStorage:
         self.directory = directory
 
     async def save(self, interaction: discord.Interaction, replay: discord.Attachment) -> str:
-        race = self.races.get(interaction.channel_id or 0)
+        race = self.races.get(interaction.channel_id or 0, is_async=False)
         if not race:
             return "There is no race in this channel."
         if interaction.user.id not in race.entrants:
@@ -43,5 +43,6 @@ class ReplayStorage:
         replay_directory.mkdir(parents=True, exist_ok=True)
         replay_path.write_bytes(replay_data)
         race.replay_urls[interaction.user.id] = replay.url
+        self.races.save(race)
         await self.tracker.update(race)
         return f"Replay submitted as `{filename}`."

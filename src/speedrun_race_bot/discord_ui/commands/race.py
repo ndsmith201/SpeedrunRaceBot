@@ -101,8 +101,11 @@ class RaceCommands(commands.Cog):
         )
 
     @race.command(name="close", description="Close the current race")
-    async def close_race(self, interaction: discord.Interaction) -> None:
-        race = self.coordinator.service.get(interaction.channel_id or 0)
+    @app_commands.describe(async_race="Close the async race instead of the live race")
+    async def close_race(self, interaction: discord.Interaction, async_race: bool = False) -> None:
+        race = self.coordinator.service.get(interaction.channel_id or 0, is_async=async_race)
+        if not race and not async_race:
+            race = self.coordinator.service.get(interaction.channel_id or 0, is_async=True)
         if not race:
             await interaction.response.send_message(
                 "There is no active race in this channel.", ephemeral=True
@@ -123,7 +126,7 @@ class RaceCommands(commands.Cog):
 
     @app_commands.command(name="playerkick", description="Remove a player from the race lobby")
     async def player_kick(self, interaction: discord.Interaction, player: discord.Member) -> None:
-        race = self.coordinator.service.get(interaction.channel_id or 0)
+        race = self.coordinator.service.get(interaction.channel_id or 0, is_async=False)
         if not race:
             await interaction.response.send_message(
                 "There is no active race in this channel.", ephemeral=True

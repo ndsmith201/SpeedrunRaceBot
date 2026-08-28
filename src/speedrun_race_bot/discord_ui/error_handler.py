@@ -23,7 +23,7 @@ class CommandErrorHandler(commands.Cog):
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
     ) -> None:
         logger.error("Application command failed: %s", error)
-        race = self.races.get(interaction.channel_id or 0)
+        race = self.races.get(interaction.channel_id or 0, is_async=False)
         if interaction.guild and race:
             voice_client = interaction.guild.voice_client
             if (

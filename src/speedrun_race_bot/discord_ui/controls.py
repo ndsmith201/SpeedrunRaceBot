@@ -22,7 +22,7 @@ class JoinRaceView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
         await interaction.response.defer()
-        message = await self.coordinator.join_race(interaction)
+        message = await self.coordinator.join_race(interaction, is_async=False)
         if message not in {"You joined the race!", "You left the race."}:
             await interaction.followup.send(message, ephemeral=True)
 
@@ -61,7 +61,7 @@ class RunningRaceView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
         await interaction.response.defer()
-        error = await self.coordinator.record_finish(interaction)
+        error = await self.coordinator.record_finish(interaction, is_async=False)
         if error:
             await interaction.followup.send(error, ephemeral=True)
 
@@ -72,7 +72,7 @@ class RunningRaceView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
         await interaction.response.defer()
-        error = await self.coordinator.record_forfeit(interaction)
+        error = await self.coordinator.record_forfeit(interaction, is_async=False)
         if error:
             await interaction.followup.send(error, ephemeral=True)
 
@@ -91,7 +91,7 @@ class AsyncRaceView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        message = await self.coordinator.join_race(interaction)
+        message = await self.coordinator.join_race(interaction, is_async=True)
         await interaction.followup.send(message, ephemeral=True)
 
     @discord.ui.button(
@@ -101,7 +101,7 @@ class AsyncRaceView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        error = await self.coordinator.record_finish(interaction)
+        error = await self.coordinator.record_finish(interaction, is_async=True)
         await interaction.followup.send(
             error or "Your finish time was recorded privately and will be revealed at close.",
             ephemeral=True,
@@ -116,7 +116,7 @@ class AsyncRaceView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        error = await self.coordinator.record_forfeit(interaction)
+        error = await self.coordinator.record_forfeit(interaction, is_async=True)
         await interaction.followup.send(
             error or "Your forfeit was recorded privately and will be revealed at close.",
             ephemeral=True,

@@ -7,3 +7,26 @@ CREATE TABLE IF NOT EXISTS user_data (
     stream_url TEXT,
     elo INTEGER NOT NULL DEFAULT 1200
 );
+
+CREATE TABLE IF NOT EXISTS races (
+    interaction_id INTEGER PRIMARY KEY,
+    channel_id INTEGER NOT NULL,
+    message_id INTEGER,
+    start_time TEXT,
+    end_time TEXT,
+    result TEXT
+);
+
+CREATE TABLE IF NOT EXISTS race_players (
+    race_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    PRIMARY KEY (race_id, user_id),
+    FOREIGN KEY (race_id) REFERENCES races(interaction_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES user_data(user_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS active_races (
+    race_id INTEGER PRIMARY KEY,
+    snapshot TEXT NOT NULL,
+    FOREIGN KEY (race_id) REFERENCES races(interaction_id) ON DELETE CASCADE
+);

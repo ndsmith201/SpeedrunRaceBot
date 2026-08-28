@@ -43,6 +43,6 @@ class PlayerProfileCommands(commands.Cog):
         )
 
     async def _refresh_active_tracker(self, interaction: discord.Interaction) -> None:
-        race = self.coordinator.service.get(interaction.channel_id or 0)
-        if race and interaction.user.id in race.entrants:
-            await self.coordinator.race_message.update(race)
+        for race in self.coordinator.service.in_channel(interaction.channel_id or 0):
+            if interaction.user.id in race.entrants:
+                await self.coordinator.race_message.update(race)

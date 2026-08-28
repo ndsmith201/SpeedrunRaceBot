@@ -48,13 +48,38 @@ class RaceCoordinator:
             bot, service, self.race_message, rando_api, self.voice_announcer
         )
         self.seed_delivery = SeedDelivery(
-            bot, self.race_message, seed_generator_command, self.project_directory
+            bot, self.race_message, service, seed_generator_command, self.project_directory
         )
         self.replays = ReplayStorage(service, self.race_message, self.replays_directory)
         self.results = RaceResults(
             service, user_data, EloService(user_data), rando_api, self.race_message
         )
         self.async_close_tasks: dict[int, asyncio.Task[None]] = {}
+        self.restore_tasks: set[asyncio.Task[None]] = set()
+
+    def restore_persisted_races(self) -> None:
+        """Recover active race workflows after the bot process restarts."""
+        for race in self.service.active_races():
+            if race.countdown_in_progress or race.countdown_value or race.show_go_emoji:
+                race.countdown_in_progress = False
+                race.countdown_value = None
+                race.countdown_starter_id = None
+                race.show_go_emoji = False
+                self.service.save(race)
+            if race.seed_generation_in_progress:
+                self.seed_delivery.schedule(race, race.interaction_id)
+            if race.is_async and race.status is RaceStatus.RUNNING and not race.closed:
+                self._schedule_async_close(race)
+            refresh_task = asyncio.create_task(
+                self._refresh_restored_race(race),
+                name=f"refresh-race-{race.interaction_id}",
+            )
+            self.restore_tasks.add(refresh_task)
+            refresh_task.add_done_callback(self.restore_tasks.discard)
+
+    async def _refresh_restored_race(self, race: Race) -> None:
+        await self.bot.wait_until_ready()
+        await self.race_message.update(race)
 
     async def create_race(
         self,
@@ -77,10 +102,10 @@ class RaceCoordinator:
                 "Choose channels from this server.", ephemeral=True
             )
             return
-        existing_race = self.service.get(channel.id)
+        existing_race = self.service.get(channel.id, is_async=False)
         if existing_race and existing_race.status is not RaceStatus.COMPLETE:
             await interaction.response.send_message(
-                "This channel already has an active race.", ephemeral=True
+                "This channel already has an active live race.", ephemeral=True
             )
             return
         preset = next(
@@ -154,7 +179,8 @@ class RaceCoordinator:
             else:
                 await interaction.response.send_message(str(error), ephemeral=True)
             return
-        await self.race_message.create(race, channel)
+        status_message = await self.race_message.create(race, channel)
+        self.service.record_tracker_message(race, status_message.id)
         if self.seed_delivery.enabled and not is_custom_preset:
             self.seed_delivery.schedule(race, interaction.id)
         await self.voice_announcer.announce_player_joined(voice_client)
@@ -187,10 +213,10 @@ class RaceCoordinator:
                 "Choose one of the available async race close durations.", ephemeral=True
             )
             return
-        existing_race = self.service.get(channel.id)
+        existing_race = self.service.get(channel.id, is_async=True)
         if existing_race and existing_race.status is not RaceStatus.COMPLETE:
             await interaction.response.send_message(
-                "This channel already has an active race.", ephemeral=True
+                "This channel already has an active async race.", ephemeral=True
             )
             return
 
@@ -220,6 +246,7 @@ class RaceCoordinator:
             return
 
         status_message = await self.race_message.create(race, channel)
+        self.service.record_tracker_message(race, status_message.id)
         pin_warning = ""
         try:
             await status_message.pin(reason=f"Async race {race.interaction_id}")
@@ -236,9 +263,11 @@ class RaceCoordinator:
             ephemeral=True,
         )
 
-    async def join_race(self, interaction: discord.Interaction) -> str:
+    async def join_race(
+        self, interaction: discord.Interaction, *, is_async: bool | None = None
+    ) -> str:
         """Toggle the button-clicking user's membership in the tracker race."""
-        race = self.service.get(interaction.channel_id or 0)
+        race = self.service.get(interaction.channel_id or 0, is_async=is_async)
         if not race:
             return "There is no active race in this channel."
         if race.is_async and interaction.user.id in race.entrants:
@@ -278,7 +307,7 @@ class RaceCoordinator:
         return "You joined the race!" if joined else "You left the race."
 
     async def ready_racer(self, interaction: discord.Interaction) -> str:
-        race = self.service.get(interaction.channel_id or 0)
+        race = self.service.get(interaction.channel_id or 0, is_async=False)
         if not race:
             return "There is no active race in this channel."
         try:
@@ -334,6 +363,8 @@ class RaceCoordinator:
         return f"Closed race `{race.interaction_id}`."
 
     def _schedule_async_close(self, race: Race) -> None:
+        if race.interaction_id in self.async_close_tasks:
+            return
         task = asyncio.create_task(
             self._close_async_at_deadline(race),
             name=f"close-async-race-{race.interaction_id}",
@@ -352,9 +383,10 @@ class RaceCoordinator:
         if not race.async_closes_at:
             return
         try:
+            await self.bot.wait_until_ready()
             delay = max(0.0, (race.async_closes_at - datetime.now(UTC)).total_seconds())
             await asyncio.sleep(delay)
-            if self.service.get(race.channel_id) is not race or race.closed:
+            if self.service.get(race.channel_id, is_async=True) is not race or race.closed:
                 return
             result_error = await self.results.finalize_async_race(race)
             self.service.close(race)
@@ -370,11 +402,15 @@ class RaceCoordinator:
         except Exception:
             logger.exception("Could not close async race %s", race.interaction_id)
 
-    async def record_finish(self, interaction: discord.Interaction) -> str | None:
-        return await self.results.record_finish(interaction)
+    async def record_finish(
+        self, interaction: discord.Interaction, *, is_async: bool | None = None
+    ) -> str | None:
+        return await self.results.record_finish(interaction, is_async=is_async)
 
-    async def record_forfeit(self, interaction: discord.Interaction) -> str | None:
-        return await self.results.record_forfeit(interaction)
+    async def record_forfeit(
+        self, interaction: discord.Interaction, *, is_async: bool | None = None
+    ) -> str | None:
+        return await self.results.record_forfeit(interaction, is_async=is_async)
 
     async def adjust_race_elo(self, race_id: int, ordered_user_ids: list[int]) -> str:
         return await self.results.adjust_elo(race_id, ordered_user_ids)
