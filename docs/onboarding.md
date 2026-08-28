@@ -9,8 +9,8 @@ The bot coordinates Symphony of the Night races in Discord. It creates race lobb
 readiness and countdowns, generates or claims randomizer seeds, records results, calculates Elo,
 stores replays, and synchronizes race state with the SotN race API.
 
-Active race state is held in memory. Restarting the bot clears active races and the in-memory
-RaceID history. User profiles and Elo ratings are stored in SQLite and survive restarts.
+Race state, RaceID history, user profiles, and Elo ratings are stored in SQLite. Active races are
+loaded when the bot restarts; async deadlines and interrupted seed generation are rescheduled.
 
 ## Prerequisites
 
@@ -124,16 +124,16 @@ invokes the checks directly; local hooks remain the fast feedback path before co
 
 ### Application package
 
-| Path                                  | Responsibility                                                                                                        |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `src/speedrun_race_bot/bot.py`        | Process startup, initial seed-bank task, extension loading, and Discord command synchronization.                      |
-| `src/speedrun_race_bot/settings.py`   | `.env` loading and application setting validation.                                                                    |
-| `src/speedrun_race_bot/domain/`       | Discord-independent `Race`, `RaceStatus`, and `Player` entities.                                                      |
-| `src/speedrun_race_bot/race/`         | Race workflows: lifecycle coordination, countdowns, results, Elo, replay storage, seed delivery, and in-memory state. |
-| `src/speedrun_race_bot/persistence/`  | SQLite-backed repositories.                                                                                           |
-| `src/speedrun_race_bot/integrations/` | SotN API client, external seed command runner, and Discord voice announcements.                                       |
-| `src/speedrun_race_bot/discord_ui/`   | Slash commands, persistent buttons, tracker rendering, error handling, and dependency composition.                    |
-| `src/speedrun_race_bot/templates/`    | Markdown fragments used to render the race tracker embed.                                                             |
+| Path                                  | Responsibility                                                                                              |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `src/speedrun_race_bot/bot.py`        | Process startup, initial seed-bank task, extension loading, and Discord command synchronization.            |
+| `src/speedrun_race_bot/settings.py`   | `.env` loading and application setting validation.                                                          |
+| `src/speedrun_race_bot/domain/`       | Discord-independent `Race`, `RaceStatus`, and `Player` entities.                                            |
+| `src/speedrun_race_bot/race/`         | Race workflows: lifecycle coordination, countdowns, results, Elo, replay storage, seed delivery, and state. |
+| `src/speedrun_race_bot/persistence/`  | SQLite-backed repositories.                                                                                 |
+| `src/speedrun_race_bot/integrations/` | SotN API client, external seed command runner, and Discord voice announcements.                             |
+| `src/speedrun_race_bot/discord_ui/`   | Slash commands, persistent buttons, tracker rendering, error handling, and dependency composition.          |
+| `src/speedrun_race_bot/templates/`    | Markdown fragments used to render the race tracker embed.                                                   |
 
 ### Supporting files
 
@@ -152,8 +152,8 @@ Git. Their `.gitkeep` files preserve the empty directories in a fresh checkout.
 ## How the application is assembled
 
 `bot.py` loads `speedrun_race_bot.discord_ui.extension`. The extension is the composition root: it
-constructs one shared race-state store, user repository, API client, and coordinator, then registers
-the command cogs and persistent views.
+constructs shared race and user repositories, the race-state service, API client, and coordinator,
+then registers the command cogs and persistent views.
 
 Keep dependency construction in `discord_ui/extension.py`. Feature modules should receive their
 dependencies through constructors rather than creating additional repositories or API clients.
@@ -168,7 +168,7 @@ The main flow is:
 1. `/race create` validates Discord channels and the selected randomizer preset.
 2. The host is stored locally and checked through the API, and the bot joins the selected voice
    channel.
-3. `RaceCoordinator` creates the in-memory race and publishes the tracker.
+3. `RaceCoordinator` persists the race and publishes the tracker.
 4. `SeedDelivery` generates a seed in the background or claims one from the seed bank.
 5. Players join, toggle readiness, and start the countdown.
 6. `RaceCountdown` starts the API race and the local timer on Go.
@@ -197,6 +197,7 @@ a background refill. The `Custom` preset skips automatic seed generation.
 | Change environment settings                      | `settings.py` and `.env.example`                             |
 | Change API endpoints                             | `integrations/rando_api.py`                                  |
 | Change stored user fields                        | `database/schema.sql` and `persistence/user_repository.py`   |
+| Change stored race or racer fields               | `database/schema.sql` and `persistence/race_repository.py`   |
 
 ## Adding a slash command
 
@@ -229,9 +230,12 @@ with buffered-only logging; seeing the randomizer output is important for diagno
 
 ## State and persistence rules
 
-- `RaceState` owns active channel lookup and in-process RaceID history.
-- Closing a race removes it from active channel lookup but preserves RaceID history until restart.
-- `UserRepository` owns SQLite access and always closes its connections.
+- `RaceState` owns lifecycle rules and caches repository results for the running process.
+- `RaceRepository` stores each race aggregate in `races` and its entrants in the one-to-many
+  `racers` table.
+- Closing a race removes it from active channel lookup but preserves its database-backed RaceID
+  history.
+- `RaceRepository` and `UserRepository` own SQLite access and always close their connections.
 - `EloService.adjust` reverses the race's stored deltas before applying a corrected order.
 - A corrected Elo order must contain every original racer exactly once.
 - Replay folders use the race interaction ID as their directory name.
@@ -283,7 +287,8 @@ one of the supported formats in `audio/countdown/`.
 ### SQLite reports a locked database
 
 Stop duplicate bot processes and inspect whether another tool has `database/bot.sqlite3` open for
-writing. Repository code should use `UserRepository.connect()` so transactions close reliably.
+writing. Repository code should use the repository `connect()` context managers so transactions
+close reliably.
 
 ## Before opening a pull request
 

@@ -43,5 +43,6 @@ class ReplayStorage:
         replay_directory.mkdir(parents=True, exist_ok=True)
         replay_path.write_bytes(replay_data)
         race.replay_urls[interaction.user.id] = replay.url
+        self.races.save(race)
         await self.tracker.update(race)
         return f"Replay submitted as `{filename}`."

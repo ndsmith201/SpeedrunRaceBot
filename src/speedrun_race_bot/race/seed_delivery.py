@@ -15,6 +15,7 @@ from speedrun_race_bot.integrations.seed_generator import (
     ensure_seedbank,
     run_seed_command,
 )
+from speedrun_race_bot.race.state import RaceState
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +27,13 @@ class SeedDelivery:
         self,
         bot: commands.Bot,
         tracker: RaceTracker,
+        races: RaceState,
         command: str | None,
         project_directory: Path,
     ) -> None:
         self.bot = bot
         self.tracker = tracker
+        self.races = races
         self.command = command
         self.project_directory = project_directory
         self.seeds_directory = project_directory / "seeds"
@@ -63,22 +66,27 @@ class SeedDelivery:
                 )
             race.seed_filename = seed_path.name
             race.seed_generation_in_progress = False
+            self.races.save(race)
 
             if race.closed:
                 seed_path.unlink(missing_ok=True)
+                self.races.save(race)
                 return
 
+            await self.bot.wait_until_ready()
             channel = self.bot.get_channel(race.channel_id)
             if isinstance(channel, discord.TextChannel) and race.status_message_id:
                 seed_message = await channel.send(
                     file=discord.File(seed_path, filename=seed_path.name)
                 )
                 race.seed_url = seed_message.attachments[0].url
+                self.races.save(race)
                 await self.tracker.update(race)
             seed_path.unlink()
         except Exception:
             race.seed_generation_in_progress = False
             race.seed_generation_error = True
+            self.races.save(race)
             logger.exception("Seed generation failed for %s — %s", race.game, race.category)
             await self.tracker.update(race)
 

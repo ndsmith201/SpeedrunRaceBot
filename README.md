@@ -1,6 +1,7 @@
 # Speedrun Race Bot
 
-A Discord bot for organizing casual speedrun races. Race state is stored in memory, so restarting the bot clears active races and their current results.
+A Discord bot for organizing casual speedrun races. Race state and racer results are stored in
+SQLite so active races resume after the bot restarts.
 
 New contributors should start with the [developer onboarding guide](docs/onboarding.md).
 
@@ -42,8 +43,8 @@ tracker hides all submitted times, standings, and result markers. At the deadlin
 a result are forfeited automatically, local Elo is calculated, and the tracker reveals the final
 results. Async races never call the SotN race API, so a normal API-backed race can run at the same
 time in another channel. The bot pins the async tracker when it is posted and needs **Manage
-Messages** permission to do so. Because race state is in memory, restarting the bot cancels an
-active async race and its scheduled close.
+Messages** permission to do so. Active async races restore their scheduled close when the bot
+restarts.
 
 Each racer starts at 1200 Elo. When a race completes, the bot applies a pairwise Elo update
 with a K-factor of 50 and stores each player's updated rating in `user_data`. Finish order
@@ -75,7 +76,7 @@ Finish times use `HH:MM:SS.mmm` and the tracker sorts completed racers by time. 
 - `/stream link:<Twitch URL>` — saves a Twitch channel link for your racer name.
 - `/replay replay:<file>` — after a race finishes, participants can upload a `.sotnr` replay up to 100 KB; a clickable VHS replay link appears beside their result.
 - `/replays raceid:<id>` — downloads a ZIP of the replay folder for a race in an ephemeral response.
-- `/eloadjust raceid:<id> players:<mentions-or-ids>` — administrator-only; reverses a completed race's Elo changes and reapplies them using every racer in the supplied finish order. Races are available by ID for the lifetime of the current bot session.
+- `/eloadjust raceid:<id> players:<mentions-or-ids>` — administrator-only; reverses a completed race's Elo changes and reapplies them using every racer in the supplied finish order. Persisted races remain available by ID after restarts.
 - `/newseason` — administrator-only; backs up `user_data` to CSV and resets every Elo to 1200.
 - `/playerkick player:<member>` — removes a racer; restricted to the race host or administrators.
 - **Join Race** — joins the lobby; press again to leave. In a running async race, joining is allowed until its deadline and entrants cannot leave.
@@ -146,10 +147,11 @@ The bot disconnects from the voice channel after the countdown ends.
 
 ## Local data
 
-User data is stored in the SQLite database `database/bot.sqlite3`. The `/flag` and `/stream`
-commands store the selected flag and Twitch link in each user's record, alongside their Elo
-rating. The local database
-is ignored by Git. The SQLite schema and pragmas are defined in `database/schema.sql`.
+User and race data are stored in the SQLite database `database/bot.sqlite3`. The `/flag` and
+`/stream` commands store the selected flag and Twitch link in each user's record, alongside their
+Elo rating. Each row in `races` owns its entrant and result rows through the one-to-many `racers`
+relationship. The local database is ignored by Git. The SQLite schema and pragmas are defined in
+`database/schema.sql`.
 
 ## Project layout
 
@@ -162,7 +164,7 @@ config/
 └── race_options.yaml       # Dynamic /race create option groups
 database/
 ├── backups/                # Timestamped season CSV backups (ignored)
-├── bot.sqlite3             # Local user database (ignored)
+├── bot.sqlite3             # Local user and race database (ignored)
 └── schema.sql              # SQLite schema and pragmas
 src/speedrun_race_bot/
 ├── bot.py                  # Bot startup and command synchronization
