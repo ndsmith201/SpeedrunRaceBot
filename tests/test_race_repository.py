@@ -191,6 +191,50 @@ def test_new_race_replaces_current_snapshot_for_channel(tmp_path: Path) -> None:
     assert [race.interaction_id for race in repository.list_active()] == [second.interaction_id]
 
 
+def test_live_and_async_snapshots_coexist_and_restore_in_one_channel(tmp_path: Path) -> None:
+    database_path = tmp_path / "bot.sqlite3"
+    repository, _ = make_repositories(database_path)
+    races = RaceState(repository)
+    live_race = races.create(make_race())
+    async_race = races.create(
+        make_race(
+            interaction_id=40,
+            async_closes_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+    )
+
+    restarted_races = RaceState(RaceRepository(database_path, SCHEMA_PATH))
+    restored = restarted_races.active_races()
+
+    assert {race.interaction_id for race in restored} == {
+        live_race.interaction_id,
+        async_race.interaction_id,
+    }
+    assert restarted_races.get(live_race.channel_id, is_async=False) == live_race
+    assert restarted_races.get(live_race.channel_id, is_async=True) == async_race
+
+
+def test_replacing_live_snapshot_preserves_async_snapshot(tmp_path: Path) -> None:
+    repository, _ = make_repositories(tmp_path / "bot.sqlite3")
+    races = RaceState(repository)
+    old_live_race = races.create(make_race())
+    async_race = races.create(
+        make_race(
+            interaction_id=40,
+            async_closes_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+    )
+    old_live_race.status = RaceStatus.COMPLETE
+    races.save(old_live_race)
+
+    new_live_race = races.create(make_race(interaction_id=50))
+
+    assert {race.interaction_id for race in repository.list_active()} == {
+        new_live_race.interaction_id,
+        async_race.interaction_id,
+    }
+
+
 def test_restore_recovers_transient_and_async_workflows(tmp_path: Path) -> None:
     database_path = tmp_path / "bot.sqlite3"
     repository, users = make_repositories(database_path)

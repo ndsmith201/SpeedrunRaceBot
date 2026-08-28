@@ -9,18 +9,31 @@ class RaceState:
 
     def __init__(self, repository: RaceRepository | None = None) -> None:
         self.repository = repository
-        self._races_by_channel: dict[int, Race] = {}
+        self._races_by_channel_and_type: dict[tuple[int, bool], Race] = {}
         self._races_by_interaction_id: dict[int, Race] = {}
 
-    def get(self, channel_id: int) -> Race | None:
-        return self._races_by_channel.get(channel_id)
+    def get(self, channel_id: int, *, is_async: bool | None = None) -> Race | None:
+        """Return a channel race, optionally selecting its live or async slot."""
+        if is_async is not None:
+            return self._races_by_channel_and_type.get((channel_id, is_async))
+        races = self.in_channel(channel_id)
+        if len(races) > 1:
+            raise ValueError("This channel has both a live race and an async race.")
+        return races[0] if races else None
+
+    def in_channel(self, channel_id: int) -> list[Race]:
+        return [
+            race
+            for is_async in (False, True)
+            if (race := self._races_by_channel_and_type.get((channel_id, is_async)))
+        ]
 
     def get_by_interaction_id(self, interaction_id: int) -> Race | None:
         return self._races_by_interaction_id.get(interaction_id)
 
     def active_races(self) -> list[Race]:
         if not self.repository:
-            return list(self._races_by_channel.values())
+            return list(self._races_by_channel_and_type.values())
         races = []
         for loaded_race in self.repository.list_active():
             race = self._races_by_interaction_id.get(loaded_race.interaction_id, loaded_race)
@@ -29,7 +42,7 @@ class RaceState:
         return races
 
     def create(self, race: Race) -> Race:
-        existing_race = self.get(race.channel_id)
+        existing_race = self.get(race.channel_id, is_async=race.is_async)
         if existing_race and existing_race.status is not RaceStatus.COMPLETE:
             raise ValueError("This channel already has an active race.")
         if self.repository:
@@ -44,10 +57,10 @@ class RaceState:
 
     def close(self, race: Race) -> None:
         """Remove a race from its channel while retaining RaceID history."""
-        if self.get(race.channel_id) is not race:
+        if self.get(race.channel_id, is_async=race.is_async) is not race:
             raise ValueError("That race is no longer active in this channel.")
         race.closed = True
-        self._races_by_channel.pop(race.channel_id)
+        self._races_by_channel_and_type.pop((race.channel_id, race.is_async))
         if self.repository:
             self.repository.close(race, datetime.now(UTC))
 
@@ -190,7 +203,7 @@ class RaceState:
             self.repository.set_end_time(race, datetime.now(UTC))
 
     def _remember(self, race: Race) -> None:
-        self._races_by_channel[race.channel_id] = race
+        self._races_by_channel_and_type[(race.channel_id, race.is_async)] = race
         self._races_by_interaction_id[race.interaction_id] = race
 
     @staticmethod

@@ -236,7 +236,7 @@ with buffered-only logging; seeing the randomizer output is important for diagno
 - `RaceRepository` stores the race interaction ID, tracker channel/message IDs, start and end
   timestamps, and JSON result.
 - `race_players` links races to `user_data` through a many-to-many relationship.
-- `active_races` stores a versioned JSON snapshot for the current race in each channel.
+- `active_races` stores versioned JSON snapshots for the current live and async races in each channel.
 - Startup restores current snapshots, resets interrupted countdown UI, reschedules seed generation
   and async deadlines, and refreshes the tracker message.
 - Closing or replacing a race deletes its live snapshot while preserving compact history.

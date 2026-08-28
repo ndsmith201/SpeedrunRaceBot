@@ -21,7 +21,7 @@ class RaceRepository:
         self._initialize()
 
     def create(self, race: Race) -> None:
-        """Create permanent history and the one live snapshot for this channel."""
+        """Create permanent history and the live snapshot for this channel and race type."""
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             connection.execute(
@@ -30,8 +30,9 @@ class RaceRepository:
                 WHERE race_id IN (
                     SELECT interaction_id FROM races WHERE channel_id = ?
                 )
+                AND (json_extract(snapshot, '$.race.async_closes_at') IS NOT NULL) = ?
                 """,
-                (race.channel_id,),
+                (race.channel_id, race.is_async),
             )
             connection.execute(
                 """

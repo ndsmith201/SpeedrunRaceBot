@@ -67,6 +67,40 @@ def test_async_join_does_not_call_the_api() -> None:
     assert tracker.updates == 1
 
 
+def test_async_join_targets_async_race_when_live_race_shares_channel() -> None:
+    races = RaceState()
+    live_race = Race(
+        guild_id=1,
+        channel_id=2,
+        voice_channel_id=4,
+        interaction_id=5,
+        host_id=10,
+        game="SotN",
+        category="",
+    )
+    races.create(live_race)
+    async_race = races.create(make_async_race())
+    races.join(async_race, 10, "Host")
+    races.start_async(async_race)
+    coordinator = object.__new__(RaceCoordinator)
+    coordinator.service = races
+    coordinator.user_data = SimpleNamespace(ensure_user=lambda user_id: None)
+    coordinator.rando_api = NoApiCallsAllowed()
+    coordinator.race_message = FakeTracker()
+    coordinator.voice_announcer = SimpleNamespace()
+    interaction = SimpleNamespace(
+        channel_id=async_race.channel_id,
+        guild=None,
+        user=SimpleNamespace(id=20, name="discord-user", display_name="Late racer"),
+    )
+
+    result = asyncio.run(coordinator.join_race(interaction, is_async=True))
+
+    assert result == "You joined the race!"
+    assert 20 in async_race.entrants
+    assert 20 not in live_race.entrants
+
+
 def test_async_results_and_finalization_do_not_call_the_api() -> None:
     races = RaceState()
     race = races.create(make_async_race())

@@ -102,10 +102,10 @@ class RaceCoordinator:
                 "Choose channels from this server.", ephemeral=True
             )
             return
-        existing_race = self.service.get(channel.id)
+        existing_race = self.service.get(channel.id, is_async=False)
         if existing_race and existing_race.status is not RaceStatus.COMPLETE:
             await interaction.response.send_message(
-                "This channel already has an active race.", ephemeral=True
+                "This channel already has an active live race.", ephemeral=True
             )
             return
         preset = next(
@@ -213,10 +213,10 @@ class RaceCoordinator:
                 "Choose one of the available async race close durations.", ephemeral=True
             )
             return
-        existing_race = self.service.get(channel.id)
+        existing_race = self.service.get(channel.id, is_async=True)
         if existing_race and existing_race.status is not RaceStatus.COMPLETE:
             await interaction.response.send_message(
-                "This channel already has an active race.", ephemeral=True
+                "This channel already has an active async race.", ephemeral=True
             )
             return
 
@@ -263,9 +263,11 @@ class RaceCoordinator:
             ephemeral=True,
         )
 
-    async def join_race(self, interaction: discord.Interaction) -> str:
+    async def join_race(
+        self, interaction: discord.Interaction, *, is_async: bool | None = None
+    ) -> str:
         """Toggle the button-clicking user's membership in the tracker race."""
-        race = self.service.get(interaction.channel_id or 0)
+        race = self.service.get(interaction.channel_id or 0, is_async=is_async)
         if not race:
             return "There is no active race in this channel."
         if race.is_async and interaction.user.id in race.entrants:
@@ -305,7 +307,7 @@ class RaceCoordinator:
         return "You joined the race!" if joined else "You left the race."
 
     async def ready_racer(self, interaction: discord.Interaction) -> str:
-        race = self.service.get(interaction.channel_id or 0)
+        race = self.service.get(interaction.channel_id or 0, is_async=False)
         if not race:
             return "There is no active race in this channel."
         try:
@@ -384,7 +386,7 @@ class RaceCoordinator:
             await self.bot.wait_until_ready()
             delay = max(0.0, (race.async_closes_at - datetime.now(UTC)).total_seconds())
             await asyncio.sleep(delay)
-            if self.service.get(race.channel_id) is not race or race.closed:
+            if self.service.get(race.channel_id, is_async=True) is not race or race.closed:
                 return
             result_error = await self.results.finalize_async_race(race)
             self.service.close(race)
@@ -400,11 +402,15 @@ class RaceCoordinator:
         except Exception:
             logger.exception("Could not close async race %s", race.interaction_id)
 
-    async def record_finish(self, interaction: discord.Interaction) -> str | None:
-        return await self.results.record_finish(interaction)
+    async def record_finish(
+        self, interaction: discord.Interaction, *, is_async: bool | None = None
+    ) -> str | None:
+        return await self.results.record_finish(interaction, is_async=is_async)
 
-    async def record_forfeit(self, interaction: discord.Interaction) -> str | None:
-        return await self.results.record_forfeit(interaction)
+    async def record_forfeit(
+        self, interaction: discord.Interaction, *, is_async: bool | None = None
+    ) -> str | None:
+        return await self.results.record_forfeit(interaction, is_async=is_async)
 
     async def adjust_race_elo(self, race_id: int, ordered_user_ids: list[int]) -> str:
         return await self.results.adjust_elo(race_id, ordered_user_ids)

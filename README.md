@@ -42,7 +42,7 @@ join until the deadline and receive private confirmation when they finish or for
 tracker hides all submitted times, standings, and result markers. At the deadline, racers without
 a result are forfeited automatically, local Elo is calculated, and the tracker reveals the final
 results. Async races never call the SotN race API, so a normal API-backed race can run at the same
-time in another channel. The bot pins the async tracker when it is posted and needs **Manage
+time, including in the same text channel. The bot pins the async tracker when it is posted and needs **Manage
 Messages** permission to do so. Active async races restore their scheduled close after a restart.
 
 Each racer starts at 1200 Elo. When a race completes, the bot applies a pairwise Elo update

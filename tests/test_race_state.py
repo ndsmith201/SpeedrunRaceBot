@@ -28,6 +28,38 @@ def test_closing_removes_channel_lookup_but_preserves_race_id_history() -> None:
     assert races.get_by_interaction_id(race.interaction_id) is race
 
 
+def test_live_and_async_races_can_be_active_in_the_same_channel() -> None:
+    races = RaceState()
+    live_race = races.create(make_race())
+    async_race = make_race(async_closes_at=datetime.now(UTC) + timedelta(hours=1))
+    async_race.interaction_id = 40
+
+    races.create(async_race)
+
+    assert races.get(live_race.channel_id, is_async=False) is live_race
+    assert races.get(live_race.channel_id, is_async=True) is async_race
+    assert races.in_channel(live_race.channel_id) == [live_race, async_race]
+
+    races.close(async_race)
+
+    assert races.get(live_race.channel_id, is_async=False) is live_race
+    assert races.get(live_race.channel_id, is_async=True) is None
+
+
+def test_channel_rejects_a_second_race_of_the_same_type() -> None:
+    races = RaceState()
+    races.create(make_race())
+    duplicate = make_race()
+    duplicate.interaction_id = 40
+
+    try:
+        races.create(duplicate)
+    except ValueError as error:
+        assert str(error) == "This channel already has an active race."
+    else:
+        raise AssertionError("Expected a duplicate live race to be rejected")
+
+
 def test_all_results_complete_a_running_race() -> None:
     races = RaceState()
     race = races.create(make_race())

@@ -32,7 +32,7 @@ class RaceCountdown:
         self.tasks: dict[int, asyncio.Task[None]] = {}
 
     async def start(self, interaction: discord.Interaction, *, silent: bool = False) -> None:
-        race = self.races.get(interaction.channel_id or 0)
+        race = self.races.get(interaction.channel_id or 0, is_async=False)
         start_error = self.races.validate_start(race, interaction.user.id)
         if start_error:
             await self._respond_to_start_error(interaction, race, start_error, silent)

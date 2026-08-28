@@ -31,8 +31,10 @@ class RaceResults:
         self.api = api
         self.tracker = tracker
 
-    async def record_finish(self, interaction: discord.Interaction) -> str | None:
-        race = self.races.get(interaction.channel_id or 0)
+    async def record_finish(
+        self, interaction: discord.Interaction, *, is_async: bool | None = None
+    ) -> str | None:
+        race = self.races.get(interaction.channel_id or 0, is_async=is_async)
         if not race:
             return "There is no active race in this channel."
         entrant = race.entrants.get(interaction.user.id)
@@ -74,8 +76,10 @@ class RaceResults:
         await self.tracker.update(race)
         return elo_error
 
-    async def record_forfeit(self, interaction: discord.Interaction) -> str | None:
-        race = self.races.get(interaction.channel_id or 0)
+    async def record_forfeit(
+        self, interaction: discord.Interaction, *, is_async: bool | None = None
+    ) -> str | None:
+        race = self.races.get(interaction.channel_id or 0, is_async=is_async)
         if not race:
             return "There is no active race in this channel."
         entrant = race.entrants.get(interaction.user.id)
