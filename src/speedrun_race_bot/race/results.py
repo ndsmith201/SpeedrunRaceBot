@@ -54,11 +54,9 @@ class RaceResults:
             entrant = race.entrants[interaction.user.id]
         if race.is_async:
             entrant.mark_api_result_synced()
-            self.races.save(race)
         elif not entrant.api_result_synced:
             if not entrant.api_name:
                 entrant.api_name = interaction.user.name
-                self.races.save(race)
             try:
                 await self.api.finish_current_racer(
                     entrant.api_name,
@@ -69,7 +67,6 @@ class RaceResults:
                 logger.warning("Could not synchronize racer finish: %s", error)
                 return f"Your finish was recorded locally, but API synchronization failed: {error}"
             entrant.mark_api_result_synced()
-            self.races.save(race)
         elo_error = await self.update_elo_if_complete(race)
         await self.tracker.update(race)
         return elo_error
@@ -95,18 +92,15 @@ class RaceResults:
             entrant = race.entrants[interaction.user.id]
         if race.is_async:
             entrant.mark_api_result_synced()
-            self.races.save(race)
         elif not entrant.api_result_synced:
             if not entrant.api_name:
                 entrant.api_name = interaction.user.name
-                self.races.save(race)
             try:
                 await self.api.finish_current_racer(entrant.api_name, None, True)
             except RandoApiError as error:
                 logger.warning("Could not synchronize racer forfeit: %s", error)
                 return f"Your forfeit was recorded locally, but API synchronization failed: {error}"
             entrant.mark_api_result_synced()
-            self.races.save(race)
         elo_error = await self.update_elo_if_complete(race)
         await self.tracker.update(race)
         return elo_error
@@ -117,7 +111,6 @@ class RaceResults:
         for entrant in race.entrants.values():
             if not entrant.api_result_synced:
                 entrant.mark_api_result_synced()
-        self.races.save(race)
 
         elo_error = await self.update_elo_if_complete(race)
         await self.tracker.update(race)
@@ -137,11 +130,10 @@ class RaceResults:
             }
             race.elo_changes = self.elo.apply(placements)
             race.elo_processed = True
-            self.races.save(race)
+        self.races.save_result(race)
         if race.is_async:
             race.elo_api_synced = True
             race.api_race_finished = True
-            self.races.save(race)
             return None
         if not race.elo_api_synced:
             preset = self._preset(race)
@@ -158,7 +150,6 @@ class RaceResults:
                 logger.warning("Could not synchronize race Elo: %s", error)
                 return f"Elo was saved locally, but API synchronization failed: {error}"
             race.elo_api_synced = True
-            self.races.save(race)
         if not race.api_race_finished:
             try:
                 await self.api.finish_current_race()
@@ -166,14 +157,13 @@ class RaceResults:
                 logger.warning("Could not finish current API race: %s", error)
                 return f"Results and Elo were saved, but API race finalization failed: {error}"
             race.api_race_finished = True
-            self.races.save(race)
         return None
 
     async def adjust_elo(self, race_id: int, ordered_user_ids: list[int]) -> str:
         """Replace a completed race's Elo result with an administrator-supplied order."""
         race = self.races.get_by_interaction_id(race_id)
         if not race:
-            return f"I couldn't find persisted race `{race_id}`."
+            return f"I couldn't find race `{race_id}` in this bot session."
         if race.status is not RaceStatus.COMPLETE or not race.elo_processed:
             return "That race has not completed its Elo adjustment yet."
         validation_error = self._validate_adjustment_order(race, ordered_user_ids)
@@ -187,7 +177,7 @@ class RaceResults:
 
         race.elo_changes = new_changes
         race.elo_api_synced = False
-        self.races.save(race)
+        self.races.save_result(race)
         preset = self._preset(race)
         if preset:
             try:
@@ -202,7 +192,6 @@ class RaceResults:
                 await self.tracker.update(race)
                 return f"Elo was adjusted locally, but API synchronization failed: {error}"
             race.elo_api_synced = True
-            self.races.save(race)
 
         await self.tracker.update(race)
         order = " → ".join(f"<@{user_id}>" for user_id in ordered_user_ids)

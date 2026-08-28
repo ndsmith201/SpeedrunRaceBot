@@ -5,7 +5,7 @@ from speedrun_race_bot.persistence import RaceRepository
 
 
 class RaceState:
-    """Race lifecycle service backed by an optional SQLite repository."""
+    """Own live race state and record compact race history in SQLite."""
 
     def __init__(self, repository: RaceRepository | None = None) -> None:
         self.repository = repository
@@ -13,42 +13,17 @@ class RaceState:
         self._races_by_interaction_id: dict[int, Race] = {}
 
     def get(self, channel_id: int) -> Race | None:
-        race = self._races_by_channel.get(channel_id)
-        if race or not self.repository:
-            return race
-        race = self.repository.get_by_channel(channel_id)
-        if race:
-            self._remember(race)
-        return race
+        return self._races_by_channel.get(channel_id)
 
     def get_by_interaction_id(self, interaction_id: int) -> Race | None:
-        race = self._races_by_interaction_id.get(interaction_id)
-        if race or not self.repository:
-            return race
-        race = self.repository.get_by_interaction_id(interaction_id)
-        if race:
-            self._races_by_interaction_id[race.interaction_id] = race
-            active_race = self.repository.get_by_channel(race.channel_id)
-            if active_race and active_race.interaction_id == race.interaction_id:
-                self._races_by_channel[race.channel_id] = race
-        return race
-
-    def active_races(self) -> list[Race]:
-        if not self.repository:
-            return list(self._races_by_channel.values())
-        races = []
-        for loaded_race in self.repository.list_active():
-            race = self._races_by_interaction_id.get(loaded_race.interaction_id, loaded_race)
-            self._remember(race)
-            races.append(race)
-        return races
+        return self._races_by_interaction_id.get(interaction_id)
 
     def create(self, race: Race) -> Race:
         existing_race = self.get(race.channel_id)
         if existing_race and existing_race.status is not RaceStatus.COMPLETE:
             raise ValueError("This channel already has an active race.")
         if self.repository:
-            self.repository.create(race)
+            self.repository.create(race.interaction_id)
         self._remember(race)
         return race
 
@@ -59,11 +34,7 @@ class RaceState:
         race.closed = True
         self._races_by_channel.pop(race.channel_id)
         if self.repository:
-            self.repository.close(race)
-
-    def save(self, race: Race) -> None:
-        if self.repository:
-            self.repository.save(race)
+            self.repository.set_end_time(race.interaction_id, datetime.now(UTC))
 
     def join(
         self, race: Race, user_id: int, display_name: str, api_name: str | None = None
@@ -76,18 +47,20 @@ class RaceState:
         )
         if race.status is not RaceStatus.LOBBY and not async_race_is_open:
             raise ValueError("The race has already started.")
+        if self.repository:
+            self.repository.add_player(race.interaction_id, user_id)
         entrant = race.entrants.setdefault(user_id, Player(user_id, display_name, api_name))
         if api_name and not entrant.api_name:
             entrant.api_name = api_name
-        self.save(race)
 
     def leave(self, race: Race, user_id: int) -> None:
         if race.status is not RaceStatus.LOBBY:
             raise ValueError("The race has already started.")
         if user_id not in race.entrants:
             raise ValueError("Join the race before leaving it.")
+        if self.repository:
+            self.repository.remove_player(race.interaction_id, user_id)
         del race.entrants[user_id]
-        self.save(race)
 
     def set_ready(self, race: Race, user_id: int) -> bool:
         if race.status is not RaceStatus.LOBBY:
@@ -95,9 +68,7 @@ class RaceState:
         entrant = race.entrants.get(user_id)
         if not entrant:
             raise ValueError("Join the race before marking yourself ready.")
-        is_ready = entrant.toggle_ready()
-        self.save(race)
-        return is_ready
+        return entrant.toggle_ready()
 
     def validate_start(self, race: Race | None, user_id: int) -> str | None:
         """Return why a race cannot start, or None when every check passes."""
@@ -123,7 +94,8 @@ class RaceState:
             raise ValueError(error)
         race.status = RaceStatus.RUNNING
         race.started_at = datetime.now(UTC)
-        self.save(race)
+        if self.repository:
+            self.repository.set_start_time(race.interaction_id, race.started_at)
 
     def start_async(self, race: Race, *, started_at: datetime | None = None) -> None:
         if not race.is_async:
@@ -132,7 +104,8 @@ class RaceState:
             raise ValueError("This race cannot be started now.")
         race.status = RaceStatus.RUNNING
         race.started_at = started_at or datetime.now(UTC)
-        self.save(race)
+        if self.repository:
+            self.repository.set_start_time(race.interaction_id, race.started_at)
 
     def finish(self, race: Race, user_id: int, display_name: str) -> None:
         if race.status is not RaceStatus.RUNNING:
@@ -148,8 +121,8 @@ class RaceState:
             other.finish_position is not None for other in race.entrants.values()
         )
         entrant.record_finish(self._format_elapsed_time(race.started_at), finish_position)
-        self._complete_if_all_results_recorded(race)
-        self.save(race)
+        if self._complete_if_all_results_recorded(race):
+            self._record_end_time(race)
 
     def forfeit(self, race: Race, user_id: int) -> None:
         if race.status is not RaceStatus.RUNNING:
@@ -158,8 +131,8 @@ class RaceState:
         if not entrant:
             raise ValueError("Join the race before forfeiting it.")
         entrant.record_forfeit()
-        self._complete_if_all_results_recorded(race)
-        self.save(race)
+        if self._complete_if_all_results_recorded(race):
+            self._record_end_time(race)
 
     def complete_async(self, race: Race) -> None:
         """Close async entry submission and forfeit racers without a result."""
@@ -173,20 +146,38 @@ class RaceState:
             if not entrant.has_result:
                 entrant.record_forfeit()
         race.status = RaceStatus.COMPLETE
-        self.save(race)
+        self._record_end_time(race)
+
+    def save_result(self, race: Race) -> None:
+        if not self.repository:
+            return
+        result = [
+            {
+                "player_name": entrant.display_name,
+                "elo_change": race.elo_changes.get(user_id, 0),
+            }
+            for user_id, entrant in race.entrants.items()
+        ]
+        self.repository.set_result(race.interaction_id, result)
+
+    def _record_end_time(self, race: Race) -> None:
+        if self.repository:
+            self.repository.set_end_time(race.interaction_id, datetime.now(UTC))
 
     def _remember(self, race: Race) -> None:
         self._races_by_channel[race.channel_id] = race
         self._races_by_interaction_id[race.interaction_id] = race
 
     @staticmethod
-    def _complete_if_all_results_recorded(race: Race) -> None:
+    def _complete_if_all_results_recorded(race: Race) -> bool:
         if (
             not race.is_async
             and race.entrants
             and all(entrant.has_result for entrant in race.entrants.values())
         ):
             race.status = RaceStatus.COMPLETE
+            return True
+        return False
 
     @staticmethod
     def _format_elapsed_time(started_at: datetime) -> str:
